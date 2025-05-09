@@ -1,0 +1,78 @@
+/* src/index.css or your global styles file */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* White */
+    --foreground: 150 60% 25%; /* Dark Green for text on white backgrounds */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 150 60% 25%; /* Dark Green */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 150 60% 25%; /* Dark Green */
+
+    --primary: 145 63% 42%; /* Primary Green (e.g., for buttons, active links) */
+    --primary-foreground: 0 0% 100%; /* White text on primary green */
+
+    --secondary: 140 50% 90%; /* Light Green (e.g., for secondary buttons, subtle backgrounds) */
+    --secondary-foreground: 145 63% 32%; /* Darker Green text on light green */
+
+    --muted: 0 0% 96.1%; /* Light Gray, can be a very light green too */
+    --muted-foreground: 150 40% 45%; /* Muted Green or Gray for less important text */
+
+    --accent: 140 55% 55%; /* Accent Green (e.g., for highlights, hover effects) */
+    --accent-foreground: 0 0% 100%; /* White text on accent green */
+
+    --destructive: 0 84.2% 60.2%; /* Default red for destructive actions */
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 89.8%; /* Light Gray border, can be a light green */
+    --input: 0 0% 89.8%; /* Input border, can be a light green */
+    --ring: 145 63% 42%; /* Focus ring, primary green */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* Define dark theme variables if needed, can also use greens */
+    --background: 150 60% 10%; /* Dark Green background */
+    --foreground: 0 0% 98%; /* Light text (white or very light green) */
+
+    --card: 150 60% 15%; /* Dark Green for cards */
+    --card-foreground: 0 0% 98%;
+
+    --popover: 150 60% 15%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 140 55% 55%; /* Brighter Green for primary in dark mode */
+    --primary-foreground: 150 60% 5%; /* Very dark green text on primary */
+
+    --secondary: 150 60% 20%; /* Darker shade of secondary green */
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 150 60% 15%;
+    --muted-foreground: 0 0% 63.9%;
+
+    --accent: 140 55% 55%;
+    --accent-foreground: 150 60% 5%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 150 60% 25%;
+    --input: 150 60% 25%;
+    --ring: 140 55% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
