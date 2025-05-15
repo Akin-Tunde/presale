@@ -8,10 +8,10 @@ import { Menu } from "lucide-react";
 import { FaTwitter, FaFacebook, FaYoutube } from "react-icons/fa";
 
 // Custom theme colors
-const colors = {
-  primary: "#134942", // Deep teal
-  white: "#FFFFFF",
-};
+//const colors = {
+ // primary: "#134942", // Deep teal
+ // white: "#FFFFFF",
+//};
 
 interface LayoutProps {
   children?: React.ReactNode;

@@ -165,13 +165,15 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
 
   // Get variant color for progress bar
   //eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const getProgressVariant = () => {
-    if (progress >= 90) return "success";
-    if (progress >= 50) return "default";
-    return "secondary";
-  };
+  
+  //const getProgressVariant = () => {
+  //  if (progress >= 90) return "success";
+  //  if (progress >= 50) return "default";
+  //  return "secondary";
+ // };
 
   // Get badge styles based on status
+  
   const getBadgeStyles = (variant: string) => {
     switch (variant) {
       case "success":

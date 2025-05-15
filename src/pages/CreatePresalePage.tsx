@@ -1062,11 +1062,20 @@ const CreatePresalePage = () => {
                   </Tooltip>
                 </Label>
                 <div className="relative">
-                  <Input
+                 <Input
                     id="tokenAddress"
                     placeholder="0x..."
                     value={tokenAddress}
-                    onChange={(e) => setTokenAddress(e.target.value as Address)}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/\s+/g, '');
+                      let pfx = '';
+                      if (val.toLowerCase().startsWith('0x')) {
+                        pfx = val.substring(0, 2);
+                        val = val.substring(2);
+                      }
+                      val = val.replace(/[^0-9a-fA-F]/gi, '').substring(0, 40);
+                      setTokenAddress((pfx + val) as Address);
+                    }}
                     disabled={isActionLoading}
                     className="text-foreground pr-10 font-mono text-sm"
                   />

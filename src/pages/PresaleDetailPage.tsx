@@ -332,7 +332,7 @@ const PresaleDetailPage = () => {
   const allowance = allowanceResult as bigint | undefined;
 
   // --- Derived State & Calculations ---
-  const presaleStatus: PresaleStatus = getPresaleStatus(state, options);
+const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
   const hardCap = options?.[1] as bigint | undefined;
   const softCap = options?.[2] as bigint | undefined;
   const minContrib = options?.[3] as bigint | undefined;
@@ -908,7 +908,9 @@ const PresaleDetailPage = () => {
                     className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
                   >
                     {isApproving ? "Approving..." : "Approve"}
-                    {approveFee && <EstimatedFeeDisplay fee={approveFee} />}
+                  {typeof approveFee === "bigint" && approveFee !== 0n && (
+  <EstimatedFeeDisplay fee={approveFee} />
+)}
                   </Button>
                 ) : (
                   <Button
@@ -919,9 +921,9 @@ const PresaleDetailPage = () => {
                     {isWritePending && currentAction === "contribute"
                       ? "Contributing..."
                       : "Contribute"}
-                    {contributeFee && (
-                      <EstimatedFeeDisplay fee={contributeFee} />
-                    )}
+                  {typeof contributeFee === "bigint" && contributeFee !== 0n && (
+  <EstimatedFeeDisplay fee={contributeFee} />
+)}
                   </Button>
                 )}
               </div>
@@ -948,7 +950,9 @@ const PresaleDetailPage = () => {
                 {isWritePending && currentAction === "claim"
                   ? "Claiming..."
                   : "Claim"}
-                {claimFee && <EstimatedFeeDisplay fee={claimFee} />}
+                {typeof claimFee === "bigint" && claimFee !== 0n && (
+  <EstimatedFeeDisplay fee={claimFee} />
+)}
               </Button>
             </div>
           )}
@@ -973,7 +977,9 @@ const PresaleDetailPage = () => {
                 {isWritePending && currentAction === "refund"
                   ? "Refunding..."
                   : "Refund"}
-                {refundFee && <EstimatedFeeDisplay fee={refundFee} />}
+                {typeof refundFee === "bigint" && refundFee !== 0n && (
+  <EstimatedFeeDisplay fee={refundFee} />
+)}
               </Button>
             </div>
           )}
