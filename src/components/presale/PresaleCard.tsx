@@ -90,7 +90,7 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
       { ...presaleContract, functionName: "options" }, // 0: PresaleOptions
       { ...presaleContract, functionName: "state" }, // 1: PresaleState
       { ...presaleContract, functionName: "token" }, // 2: Token Address
-      { ...presaleContract, functionName: "totalContributed" }, // 3: Total Contributed
+      { ...presaleContract, functionName: "getTotalContributed" }, // 3: Total Contributed
     ],
   });
 

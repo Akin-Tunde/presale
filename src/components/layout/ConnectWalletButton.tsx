@@ -12,7 +12,7 @@ import {
   DialogTrigger,
   DialogDescription,
 } from '@/components/ui/dialog';
-import { base } from 'wagmi/chains';
+import { base, sepolia } from 'wagmi/chains';
 
 const ConnectWalletButton = () => {
   const { address, isConnected, chainId: connectedChainId } = useAccount();
@@ -26,8 +26,8 @@ const ConnectWalletButton = () => {
   const [chainError, setChainError] = useState<string | null>(null);
 
   // ✅ Fixed: explicitly declare number[] to avoid literal type error
-  const allowedChainIds: number[] = [base.id];
-  const allowedChainNames = [base.name].join(', ');
+  const allowedChainIds: number[] = [base.id , sepolia.id];
+  const allowedChainNames = [base.name, sepolia.name].join(' or ');
 
   useEffect(() => {
     console.log('Detected Connectors:', connectors);

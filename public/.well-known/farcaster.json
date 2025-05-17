@@ -6,13 +6,13 @@
   },
   "frame": {
     "version": "1",
-    "name": "Example Frame",
+    "name": "Raize",
     "iconUrl": "https://raize-5.netlify.app/icon.png",
     "homeUrl": "https://raize-5.netlify.app",
     "imageUrl": "https://raize-5.netlify.app/image.png",
     "buttonTitle": "Check this out",
     "splashImageUrl": "https://raize-5.netlify.app/splash.png",
-    "splashBackgroundColor": "#eeccff",
+    "splashBackgroundColor": "#1f2937",
     "webhookUrl": "https://raize-5.netlify.app/api/webhook"
   }
 }
