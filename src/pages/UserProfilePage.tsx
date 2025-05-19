@@ -17,6 +17,8 @@ import PresaleJson from "@/abis/Presale.json";
 import { getPresaleStatus, cn, type PresaleStatusReturn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { UserProfileFarcasterSection } from "@/components/UserProfileFarcasterSection";
+
 
 const factoryAbi = PresaleFactoryJson.abi as Abi;
 const presaleAbi = PresaleJson.abi as Abi;
@@ -748,6 +750,11 @@ const UserProfilePage = () => {
                     </div>
                 </CardHeader>
             </Card>
+
+            {/* Add the Farcaster Profile Section right here */}
+<div className="mb-6">
+    <UserProfileFarcasterSection userAddress={mainAddress} />
+</div>
 
             <Tabs defaultValue="created">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
