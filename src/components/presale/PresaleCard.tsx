@@ -9,13 +9,21 @@ import {
   CardHeader,
   CardTitle,
   CardDescription,
+  CardFooter,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { getPresaleStatus } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState } from "react";
-import { Calendar, Clock, TrendingUp } from "lucide-react"; // Added lucide icons
+import { Calendar, Clock, TrendingUp, Share2 } from "lucide-react"; // Added Share2 icon
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const presaleAbi = PresaleJson.abi as Abi;
 
@@ -163,18 +171,8 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
     isLoadingCurrencySymbol ||
     isLoadingCurrencyDecimals;
 
-  // Get variant color for progress bar
-  //eslint-disable-next-line @typescript-eslint/no-unused-vars
-  
-  //const getProgressVariant = () => {
-  //  if (progress >= 90) return "success";
-  //  if (progress >= 50) return "default";
-  //  return "secondary";
- // };
-
   // Get badge styles based on status
-  
-  const getBadgeStyles = (variant: string) => {
+  const getBadgeStyles = (variant: string ) => {
     switch (variant) {
       case "success":
         return "bg-green-100 text-green-800 border-green-200";
@@ -189,6 +187,19 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
         return "bg-[#13494220] text-[#134942] border-[#13494240]";
     }
   };
+
+  // Share URLs
+  const appUrl = "https://raize-5.netlify.app";
+  const presalePageUrl = `${appUrl}/presale/${presaleAddress}`;
+  
+  // Create share text with presale name and token details
+  const shareText = `Check out this presale on Raize: ${tokenSymbol || "Token"} (${currencyDisplaySymbol} ) - Ends: ${formatDate(endTime)}`;
+  
+  // Create Warpcast share URL
+  const warpcastShareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText )}&embeds[]=${encodeURIComponent(presalePageUrl)}`;
+  
+  // Create Twitter share URL
+  const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText )}&url=${encodeURIComponent(presalePageUrl)}`;
 
   // Skeleton Loader
   if (isLoading) {
@@ -217,80 +228,134 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
   }
 
   return (
-    <Link to={`/presale/${presaleAddress}`} className="block group">
-      <Card className="border-2 border-[#13494220] rounded-xl overflow-hidden shadow-sm hover:shadow-lg hover:border-[#134942] transition-all duration-300 h-full flex flex-col">
-        <CardHeader className="flex flex-row items-start gap-3 bg-[#13494208] pb-4 group-hover:bg-[#13494210] transition-colors duration-300">
-          <Avatar className="h-12 w-12 border-2 border-[#13494220] shadow-sm">
-            {/* Display logo if URL exists and no error occurred, otherwise fallback */}
-            <AvatarImage
-              src={logoUrl}
-              alt={`${tokenSymbol || "Token"} logo`}
-              onError={() => setLogoError(true)}
-              className={logoError ? "hidden" : "block"}
-            />
-            <AvatarFallback
-              className={`${
-                !logoUrl || logoError ? "block" : "hidden"
-              } bg-[#13494215] text-[#134942] font-bold text-xl`}
-            >
-              {getInitials(tokenSymbol)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 space-y-1">
-            <CardTitle className="text-lg font-bold text-[#134942] leading-tight group-hover:translate-x-0.5 transition-transform duration-300">
-              {tokenSymbol || "Token"} Presale
-            </CardTitle>
-            <CardDescription className="text-xs font-mono break-all pt-1 text-[#13494299]">
-              {`${presaleAddress.slice(0, 6)}...${presaleAddress.slice(-4)}`}
-              <span className="hidden group-hover:inline">
-                {presaleAddress.slice(6, -4)}
-              </span>
-            </CardDescription>
-          </div>
-          <Badge
-            className={`border px-2.5 py-0.5 text-xs font-medium rounded-full ${getBadgeStyles(
-              presaleStatus.variant || "default"
-            )}`}
+    <Card className="border-2 border-[#13494220] rounded-xl overflow-hidden shadow-sm hover:shadow-lg hover:border-[#134942] transition-all duration-300 h-full flex flex-col">
+      <CardHeader className="flex flex-row items-start gap-3 bg-[#13494208] pb-4 group-hover:bg-[#13494210] transition-colors duration-300">
+        <Avatar className="h-12 w-12 border-2 border-[#13494220] shadow-sm">
+          {/* Display logo if URL exists and no error occurred, otherwise fallback */}
+          <AvatarImage
+            src={logoUrl}
+            alt={`${tokenSymbol || "Token"} logo`}
+            onError={() => setLogoError(true)}
+            className={logoError ? "hidden" : "block"}
+          />
+          <AvatarFallback
+            className={`${
+              !logoUrl || logoError ? "block" : "hidden"
+            } bg-[#13494215] text-[#134942] font-bold text-xl`}
           >
-            {presaleStatus.text}
-          </Badge>
-        </CardHeader>
-        <CardContent className="space-y-4 flex-1 flex flex-col justify-end pt-4">
-          <div className="space-y-2">
-            <Progress
-              value={progress}
-              className={`w-full h-2.5 bg-[#13494215] [&>div]:bg-[#134942] ${
-                progress < 100 ? "rounded-r-none" : ""
-              }`}
-            />
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-[#134942] font-medium">
-                {progress.toFixed(1)}%
+            {getInitials(tokenSymbol)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 space-y-1">
+          <CardTitle className="text-lg font-bold text-[#134942] leading-tight group-hover:translate-x-0.5 transition-transform duration-300">
+            {tokenSymbol || "Token"} Presale
+          </CardTitle>
+          <CardDescription className="text-xs font-mono break-all pt-1 text-[#13494299]">
+            {`${presaleAddress.slice(0, 6)}...${presaleAddress.slice(-4)}`}
+            <span className="hidden group-hover:inline">
+              {presaleAddress.slice(6, -4)}
+            </span>
+          </CardDescription>
+        </div>
+        <Badge
+          className={`border px-2.5 py-0.5 text-xs font-medium rounded-full ${getBadgeStyles(
+            presaleStatus.variant || "default"
+          )}`}
+        >
+          {presaleStatus.text}
+        </Badge>
+      </CardHeader>
+      <CardContent className="space-y-4 flex-1 flex flex-col justify-end pt-4">
+        <div className="space-y-2">
+          <Progress
+            value={progress}
+            className={`w-full h-2.5 bg-[#13494215] [&>div]:bg-[#134942] ${
+              progress < 100 ? "rounded-r-none" : ""
+            }`}
+          />
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-[#134942] font-medium">
+              {progress.toFixed(1)}%
+            </span>
+            <p className="text-[#13494299] text-right flex items-center gap-1">
+              <TrendingUp className="h-3.5 w-3.5 inline text-[#13494290]" />
+              <span>
+                {formatCurrency(totalContributedFormatted)} /{" "}
+                {formatCurrency(hardCapFormatted)}{" "}
+                <span className="font-medium">{currencyDisplaySymbol}</span>
               </span>
-              <p className="text-[#13494299] text-right flex items-center gap-1">
-                <TrendingUp className="h-3.5 w-3.5 inline text-[#13494290]" />
-                <span>
-                  {formatCurrency(totalContributedFormatted)} /{" "}
-                  {formatCurrency(hardCapFormatted)}{" "}
-                  <span className="font-medium">{currencyDisplaySymbol}</span>
-                </span>
-              </p>
-            </div>
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-2 pt-3 mt-auto border-t border-[#13494215]">
-            <div className="flex items-center gap-1.5 text-xs text-[#13494299]">
-              <Calendar className="h-3.5 w-3.5 text-[#134942]" />
-              <span>Start: {formatDate(startTime)}</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-[#13494299] justify-end">
-              <Clock className="h-3.5 w-3.5 text-[#134942]" />
-              <span>End: {formatDate(endTime)}</span>
-            </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-3 mt-auto border-t border-[#13494215]">
+          <div className="flex items-center gap-1.5 text-xs text-[#13494299]">
+            <Calendar className="h-3.5 w-3.5 text-[#134942]" />
+            <span>Start: {formatDate(startTime)}</span>
           </div>
-        </CardContent>
-      </Card>
-    </Link>
-  );
+          <div className="flex items-center gap-1.5 text-xs text-[#13494299] justify-end">
+            <Clock className="h-3.5 w-3.5 text-[#134942]" />
+            <span>End: {formatDate(endTime)}</span>
+          </div>
+        </div>
+      </CardContent>
+      <CardFooter className="flex justify-between items-center pt-2 pb-4">
+        <Link to={`/presale/${presaleAddress}`} className="block">
+          <Button 
+            variant="default" 
+            size="sm"
+            className="bg-[#134942] hover:bg-[#0d322d] text-white rounded-md px-4 py-2 transition-colors"
+          >
+            View Details
+          </Button>
+        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="border border-[#13494240] hover:bg-[#13494210] hover:text-[#134942] rounded-md px-3 py-2 transition-colors"
+            >
+              <Share2 className="h-4 w-4 mr-1" /> Share
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem asChild>
+              <a 
+                href={warpcastShareUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center cursor-pointer"
+              >
+                <img 
+                  src="https://warpcast.com/favicon.ico" 
+                  alt="Warpcast" 
+                  className="h-4 w-4 mr-2" 
+                />
+                Share on Warpcast
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a 
+                href={twitterShareUrl} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex items-center cursor-pointer"
+              >
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  viewBox="0 0 24 24" 
+                  className="h-4 w-4 mr-2 fill-current"
+                >
+                  <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+                </svg>
+                Share on Twitter
+              </a>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </CardFooter>
+    </Card>
+   );
 };
 
 export default PresaleCard;
