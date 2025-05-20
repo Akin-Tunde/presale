@@ -6,13 +6,13 @@
   },
   "frame": {
     "version": "1",
-    "name": "Example Frame",
+    "name": "Raize",
     "iconUrl": "https://raize-5.netlify.app/icon.png",
     "homeUrl": "https://raize-5.netlify.app",
     "imageUrl": "https://raize-5.netlify.app/image.png",
     "buttonTitle": "Check this out",
     "splashImageUrl": "https://raize-5.netlify.app/splash.png",
-    "splashBackgroundColor": "#eeccff",
-    "webhookUrl": "https://raize-5.netlify.app/api/webhook"
+    "splashBackgroundColor": "#1f2937",
+    "webhookUrl": "https://api.neynar.com/f/app/77af59ea-8cfa-48b1-a199-6b0eec64fddb/event"
   }
 }

@@ -63,7 +63,7 @@ export const FarcasterProfileDisplay: React.FC<FarcasterProfileDisplayProps> = (
         <AvatarFallback
           className="bg-[#13494215] text-[#134942] font-bold"
         >
-          {getInitials(profile?.displayName || profile?.username)}
+         {getInitials((profile?.displayName || profile?.username || null))}
         </AvatarFallback>
       </Avatar>
       
