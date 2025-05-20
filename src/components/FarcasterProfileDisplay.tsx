@@ -21,11 +21,16 @@ export const FarcasterProfileDisplay: React.FC<FarcasterProfileDisplayProps> = (
   
   useEffect(() => {
     if (address) {
-      getProfilesByAddresses([address]);
+      console.log("[FarcasterProfileDisplay] Fetching profiles for address:", address);
+      getProfilesByAddresses([address]).then(() => {
+        const profile = getProfile(address);
+        console.log("[FarcasterProfileDisplay] Profile data received:", profile);
+      });
     }
-  }, [address, getProfilesByAddresses]);
+  }, [address, getProfilesByAddresses, getProfile]);
   
   const profile = getProfile(address);
+  console.log("[FarcasterProfileDisplay] Current profile data:", profile);
   
   // Size classes for avatar
   const sizeClasses = {
@@ -52,6 +57,10 @@ export const FarcasterProfileDisplay: React.FC<FarcasterProfileDisplayProps> = (
     );
   }
   
+  // Ensure we have display text
+  const displayText = profile?.displayName || profile?.username || `${address.slice(0, 6)}...${address.slice(-4)}`;
+  console.log("[FarcasterProfileDisplay] Display text:", displayText);
+  
   return (
     <div className="flex items-center gap-2">
       <Avatar className={`${sizeClasses[size]} border-2 border-[#13494220] shadow-sm`}>
@@ -63,14 +72,14 @@ export const FarcasterProfileDisplay: React.FC<FarcasterProfileDisplayProps> = (
         <AvatarFallback
           className="bg-[#13494215] text-[#134942] font-bold"
         >
-         {getInitials((profile?.displayName || profile?.username || null))}
+          {getInitials((profile?.displayName || profile?.username || null))}
         </AvatarFallback>
       </Avatar>
       
       <div className="flex flex-col">
         <div className="flex items-center gap-2">
           <span className="font-medium text-[#134942]">
-            {profile?.displayName || profile?.username || `${address.slice(0, 6)}...${address.slice(-4)}`}
+            {displayText}
           </span>
           
           {showBadge && profile?.username && (

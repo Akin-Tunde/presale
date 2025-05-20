@@ -17,13 +17,24 @@ export const UserProfileFarcasterSection: React.FC<UserProfileFarcasterSectionPr
   const { getProfile, getProfilesByAddresses } = useFarcasterProfiles();
   const [isLoading, setIsLoading] = useState(false);
   const [isLinked, setIsLinked] = useState(false);
+  const [profileData, setProfileData] = useState<any>(null);
   
   // Check if the profile is already linked
   useEffect(() => {
     if (userAddress) {
+      console.log("[UserProfileFarcasterSection] Fetching profile for address:", userAddress);
+      setIsLoading(true);
+      
       getProfilesByAddresses([userAddress]).then(() => {
         const profile = getProfile(userAddress);
+        console.log("[UserProfileFarcasterSection] Retrieved profile:", profile);
+        
+        setProfileData(profile);
         setIsLinked(!!profile?.fid);
+        setIsLoading(false);
+      }).catch(error => {
+        console.error("[UserProfileFarcasterSection] Error fetching profile:", error);
+        setIsLoading(false);
       });
     }
   }, [userAddress, getProfile, getProfilesByAddresses]);

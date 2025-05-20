@@ -11,7 +11,7 @@ export interface FarcasterUserProfile {
 }
 
 // Configuration for Neynar API
-const NEYNAR_API_KEY = import.meta.env.VITE_NEYNAR_API_KEY;
+const NEYNAR_API_KEY = import.meta.env.VITE_NEYNAR_API_KEY || import.meta.env.NEYNAR_API_KEY;
 const NEYNAR_API_USER_BULK_BY_ADDRESS_URL = "https://api.neynar.com/v2/farcaster/user/bulk-by-address";
 
 interface NeynarUserV2 {
@@ -27,7 +27,7 @@ interface NeynarBulkUsersResponse {
 }
 
 // Cache to store profiles and avoid redundant API calls
-const profileCache = new Map<string, FarcasterUserProfile>();
+const profileCache = new Map<string, FarcasterUserProfile>( );
 const inflightRequests = new Set<string>();
 
 /**
@@ -84,6 +84,7 @@ async function fetchFarcasterProfilesFromApi(
       }
 
       const data = (await response.json()) as NeynarBulkUsersResponse;
+      console.log("[API] Received data from Neynar:", data);
 
       if (data && typeof data === "object" && Object.keys(data).length > 0) {
         Object.entries(data).forEach(
@@ -100,6 +101,7 @@ async function fetchFarcasterProfilesFromApi(
 
             if (neynarUsersArray && neynarUsersArray.length > 0) {
               const primaryNeynarUser = neynarUsersArray[0];
+              console.log("[API] Processing user data:", primaryNeynarUser);
               const userProfile: FarcasterUserProfile = {
                 fid: primaryNeynarUser.fid,
                 username: primaryNeynarUser.username,
