@@ -13,6 +13,6 @@
     "buttonTitle": "Check this out",
     "splashImageUrl": "https://raize-5.netlify.app/splash.png",
     "splashBackgroundColor": "#1f2937",
-    "webhookUrl": "https://raize-5.netlify.app/api/webhook"
+    "webhookUrl": "https://api.neynar.com/f/app/77af59ea-8cfa-48b1-a199-6b0eec64fddb/event"
   }
 }
