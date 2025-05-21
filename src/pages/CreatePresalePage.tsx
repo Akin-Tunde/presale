@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react"; // Added useCallback
 import {
   useAccount,
   useWriteContract,
@@ -44,22 +44,24 @@ import {
   Info,
   Loader2,
   ServerCrash,
-  X,
+  // X,
   CheckCircle2,
   ArrowDownUp,
   BadgeEuro,
   ArrowDown,
   ArrowUp,
-  Droplets,
-  Percent,
+  // Droplets,
+  // Percent,
   Clock,
   Coins,
   Copy,
   Rocket,
-  ClipboardCheck,
-  CircleDollarSign,
+  // ClipboardCheck,
+  // CircleDollarSign,
   Lock,
   Hash,
+  ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EstimatedFeeDisplay } from "@/pages/PresaleDetailPage";
@@ -79,13 +81,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+// import { Progress } from "@/components/ui/progress";
 
 const factoryAbi = PresaleFactoryJson.abi as Abi;
 const erc20Abi = ERC20Json as Abi;
-
-// const CREATION_FEE_CONSTANT = 10000000000000n; // 0.01 ETH in wei
-// const FEE_TOKEN_DECIMALS = 18; // Always assume 18 decimals for ETH fee
-// const FEE_TOKEN_SYMBOL = "ETH"; // Always assume ETH symbol
 
 // Attempt to get addresses from environment variables
 let factoryAddress: Address | undefined;
@@ -137,23 +136,19 @@ const handleNumericInput = (
   value: string,
   setter: (value: string) => void,
   allowDecimal: boolean = false,
-  maxDigits?: number, // Max total digits (optional)
-  maxDecimalPlaces?: number, // Max decimal places (optional)
-  maxValue?: number // Max numeric value (optional)
+  maxDigits?: number,
+  maxDecimalPlaces?: number,
+  maxValue?: number
 ) => {
   let sanitizedValue = value;
-
-  // Remove non-numeric characters, except decimal point if allowed
   const regex = allowDecimal ? /[^0-9.]/g : /[^0-9]/g;
   sanitizedValue = sanitizedValue.replace(regex, "");
 
-  // Handle multiple decimal points if decimals are allowed
   if (allowDecimal) {
     const parts = sanitizedValue.split(".");
     if (parts.length > 2) {
       sanitizedValue = parts[0] + "." + parts.slice(1).join("");
     }
-    // Limit decimal places
     if (
       maxDecimalPlaces !== undefined &&
       parts[1] &&
@@ -163,17 +158,13 @@ const handleNumericInput = (
     }
   }
 
-  // Limit total digits if specified
   if (maxDigits !== undefined) {
     const currentDigits = sanitizedValue.replace(".", "").length;
     if (currentDigits > maxDigits) {
-      // This logic might need refinement depending on desired behavior (e.g., truncate vs. prevent)
-      // For now, let's prevent further input if max digits are exceeded
-      return; // Or potentially truncate: sanitizedValue = sanitizedValue.substring(0, maxDigits + (sanitizedValue.includes('.') ? 1 : 0));
+      return;
     }
   }
 
-  // Prevent leading zeros unless it's the only digit or followed by a decimal
   if (
     sanitizedValue.length > 1 &&
     sanitizedValue.startsWith("0") &&
@@ -185,16 +176,13 @@ const handleNumericInput = (
     sanitizedValue = "0.";
   }
 
-  // Enforce max value if specified
   if (maxValue !== undefined) {
     try {
       const numericValue = parseFloat(sanitizedValue);
       if (!isNaN(numericValue) && numericValue > maxValue) {
         sanitizedValue = maxValue.toString();
       }
-    } catch {
-      /* Ignore parsing errors */
-    }
+    } catch {}
   }
 
   setter(sanitizedValue);
@@ -212,9 +200,12 @@ const CreatePresalePage = () => {
     useWaitForTransactionReceipt({ hash });
   const { data: feeData } = useFeeData();
 
+  // --- Stage State ---
+  const [currentStage, setCurrentStage] = useState<number>(1);
+
   // --- Approval State & Hooks ---
   const [approvalHash, setApprovalHash] = useState<Address | undefined>();
-  const { writeContractAsync: approveAsync } = useWriteContract(); // Removed isPending: isApprovingWrite
+  const { writeContractAsync: approveAsync } = useWriteContract();
   const { isLoading: isConfirmingApproval, isSuccess: isApprovedSuccess } =
     useWaitForTransactionReceipt({ hash: approvalHash });
 
@@ -233,7 +224,7 @@ const CreatePresalePage = () => {
 
   // Form State
   const [tokenAddress, setTokenAddress] = useState<Address | "">("");
-  const [currencyAddress] = useState<Address>(zeroAddress); // Assuming ETH presales only for now
+  const [currencyAddress] = useState<Address>(zeroAddress);
   const [ratePresale, setRatePresale] = useState(
     DEFAULT_LISTING_RATE.toString()
   );
@@ -263,10 +254,10 @@ const CreatePresalePage = () => {
   const [vestingTgePercent, setVestingTgePercent] = useState("10");
   const [vestingCycleDays, setVestingCycleDays] = useState("30");
   const [vestingCyclePercent, setVestingCyclePercent] = useState("10");
-  const [leftoverTokenOption, setLeftoverTokenOption] = useState(2); // Default to third option (index 2)
+  const [leftoverTokenOption, setLeftoverTokenOption] = useState(2);
 
   // Whitelist State
-  const [whitelistType, setWhitelistType] = useState<number>(0); // 0: None, 1: Merkle (Not Implemented), 2: NFT
+  const [whitelistType, setWhitelistType] = useState<number>(0);
   const [nftContractAddress, setNftContractAddress] = useState<Address | "">(
     ""
   );
@@ -291,10 +282,6 @@ const CreatePresalePage = () => {
   }, []);
 
   // --- Factory Config ---
-  // const creationFee = CREATION_FEE_CONSTANT; // Old hardcoded fee
-  // const feeTokenDecimals = FEE_TOKEN_DECIMALS; // Old hardcoded fee decimals
-  // const feeTokenSymbol = FEE_TOKEN_SYMBOL; // Old hardcoded fee symbol
-
   const {
     data: factoryCreationFeeData,
     isLoading: isLoadingFactoryCreationFee,
@@ -337,7 +324,7 @@ const CreatePresalePage = () => {
     address:
       factoryFeeTokenAddress === zeroAddress
         ? undefined
-        : factoryFeeTokenAddress, // Only fetch if it's an ERC20 token
+        : factoryFeeTokenAddress,
     abi: erc20Abi,
     functionName: "decimals",
     query: {
@@ -348,7 +335,7 @@ const CreatePresalePage = () => {
     },
   });
   const factoryFeeTokenDecimals = useMemo(() => {
-    if (factoryFeeTokenAddress === zeroAddress) return 18; // ETH default
+    if (factoryFeeTokenAddress === zeroAddress) return 18;
     return typeof factoryFeeTokenDecimalsData === "number" ||
       typeof factoryFeeTokenDecimalsData === "bigint"
       ? Number(factoryFeeTokenDecimalsData)
@@ -362,7 +349,7 @@ const CreatePresalePage = () => {
     address:
       factoryFeeTokenAddress === zeroAddress
         ? undefined
-        : factoryFeeTokenAddress, // Only fetch if it's an ERC20 token
+        : factoryFeeTokenAddress,
     abi: erc20Abi,
     functionName: "symbol",
     query: {
@@ -373,7 +360,7 @@ const CreatePresalePage = () => {
     },
   });
   const factoryFeeTokenSymbol = useMemo(() => {
-    if (factoryFeeTokenAddress === zeroAddress) return "ETH"; // ETH default
+    if (factoryFeeTokenAddress === zeroAddress) return "ETH";
     return typeof factoryFeeTokenSymbolData === "string"
       ? factoryFeeTokenSymbolData
       : undefined;
@@ -412,11 +399,10 @@ const CreatePresalePage = () => {
         currentFeeTokenAllowance >= factoryCreationFee
       );
     } else if (factoryFeeTokenAddress === zeroAddress) {
-      setHasSufficientFeeTokenAllowance(true); // For ETH fee, no allowance needed
+      setHasSufficientFeeTokenAllowance(true);
     }
   }, [factoryFeeTokenAddress, currentFeeTokenAllowance, factoryCreationFee]);
 
-  // Effect to refetch fee token allowance when approval is successful
   useEffect(() => {
     if (isFeeTokenApprovedSuccess) {
       toast.success("Fee Token Approved Successfully!");
@@ -426,7 +412,7 @@ const CreatePresalePage = () => {
   }, [isFeeTokenApprovedSuccess, refetchFeeTokenAllowance]);
 
   // --- Derived Values ---
-  const currencyDecimals = 18; // Assuming ETH
+  const currencyDecimals = 18;
   const calculatedStartTime = useMemo(() => {
     return startTime ? BigInt(Math.floor(startTime.getTime() / 1000)) : 0n;
   }, [startTime]);
@@ -465,7 +451,7 @@ const CreatePresalePage = () => {
   // --- Fetch Token Decimals ---
   const { data: tokenDecimalsData, isLoading: isLoadingTokenDecimals } =
     useReadContract({
-      address: tokenAddress || undefined,
+      address: tokenAddress && isAddress(tokenAddress) ? tokenAddress : undefined,
       abi: erc20Abi,
       functionName: "decimals",
       query: {
@@ -482,7 +468,7 @@ const CreatePresalePage = () => {
   // --- Calculate Required Token Deposit ---
   const calculationOptions = useMemo(
     () => ({
-      tokenDeposit: 0n, // This is the first field in the ABI struct for PresaleOptions
+      tokenDeposit: 0n,
       hardCap: hardCapParsed,
       softCap: softCapParsed,
       min: minContributionParsed,
@@ -490,10 +476,11 @@ const CreatePresalePage = () => {
       presaleRate: BigInt(ratePresale || "0"),
       listingRate: BigInt(rateLiquidity || "0"),
       liquidityBps: BigInt(parseInt(liquidityPercent || "0") * 100),
-      slippageBps: 300n, // Default slippage, consistent with presaleOptionsArgs
+      slippageBps: 300n,
       start: calculatedStartTime,
       end: calculatedEndTime,
-      lockupDuration: BigInt(parseInt(liquidityLockDays || "0") * 24 * 60 * 60),
+      lockupDuration:
+        BigInt(parseInt(liquidityLockDays || "0") * 24 * 60 * 60),
       vestingPercentage: useVesting
         ? BigInt(parseInt(vestingTgePercent || "0") * 100)
         : 0n,
@@ -504,7 +491,7 @@ const CreatePresalePage = () => {
       currency: currencyAddress,
       whitelistType: BigInt(whitelistType),
       merkleRoot:
-        "0x0000000000000000000000000000000000000000000000000000000000000000", // Default
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
       nftContractAddress:
         whitelistType === 2 && isAddress(nftContractAddress)
           ? nftContractAddress
@@ -539,7 +526,7 @@ const CreatePresalePage = () => {
     address: factoryAddress,
     abi: factoryAbi,
     functionName: "calculateTotalTokensNeededForPresale",
-    args: [calculationOptions, tokenAddress || zeroAddress],
+    args: [calculationOptions, tokenAddress && isAddress(tokenAddress) ? tokenAddress : zeroAddress],
     query: {
       enabled:
         !!factoryAddress &&
@@ -549,17 +536,16 @@ const CreatePresalePage = () => {
         BigInt(ratePresale || "0") > 0n &&
         BigInt(rateLiquidity || "0") > 0n &&
         BigInt(parseInt(liquidityPercent || "0")) > 0n &&
-        !isLoadingTokenDecimals && // Ensure decimals are loaded before calculating
+        !isLoadingTokenDecimals &&
         tokenDecimals !== undefined,
-      // Refetch when relevant inputs change
-      refetchInterval: false, // Only refetch manually or on mount/dependency change
+      refetchInterval: false,
     },
   });
 
-  // --- Check Allowance (Moved AFTER calculatedTokenDeposit declaration) ---
+  // --- Check Allowance ---
   const { data: currentAllowance, refetch: refetchAllowance } = useReadContract(
     {
-      address: tokenAddress || undefined,
+      address: tokenAddress && isAddress(tokenAddress) ? tokenAddress : undefined,
       abi: erc20Abi,
       functionName: "allowance",
       args: [userAddress!, factoryAddress!],
@@ -583,22 +569,21 @@ const CreatePresalePage = () => {
     }
   }, [currentAllowance, calculatedTokenDeposit]);
 
-  // Effect to refetch allowance when approval is successful
   useEffect(() => {
     if (isApprovedSuccess) {
       toast.success("Token Approved Successfully!");
       refetchAllowance();
-      setIsApproving(false); // Reset approving state
+      setIsApproving(false);
     }
   }, [isApprovedSuccess, refetchAllowance]);
 
-  // --- Prepare Contract Arguments (including calculated deposit) ---
+  // --- Prepare Contract Arguments ---
   const presaleOptionsArgs = useMemo(
     () => ({
       tokenDeposit:
         typeof calculatedTokenDeposit === "bigint"
           ? calculatedTokenDeposit
-          : 0n, // Use calculated value
+          : 0n,
       hardCap: hardCapParsed,
       softCap: softCapParsed,
       min: minContributionParsed,
@@ -606,7 +591,7 @@ const CreatePresalePage = () => {
       presaleRate: BigInt(ratePresale || "0"),
       listingRate: BigInt(rateLiquidity || "0"),
       liquidityBps: BigInt(parseInt(liquidityPercent || "0") * 100),
-      slippageBps: 300n, // Default slippage
+      slippageBps: 300n,
       start: calculatedStartTime,
       end: calculatedEndTime,
       lockupDuration: BigInt(parseInt(liquidityLockDays || "0") * 24 * 60 * 60),
@@ -618,14 +603,13 @@ const CreatePresalePage = () => {
         : 0n,
       leftoverTokenOption: BigInt(leftoverTokenOption),
       currency: currencyAddress,
-      // --- Whitelist Params ---
-      whitelistType: BigInt(whitelistType), // Use state variable
+      whitelistType: BigInt(whitelistType),
       merkleRoot:
-        "0x0000000000000000000000000000000000000000000000000000000000000000", // Default for now
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
       nftContractAddress:
         whitelistType === 2 && isAddress(nftContractAddress)
           ? nftContractAddress
-          : zeroAddress, // Use state or zero address
+          : zeroAddress,
     }),
     [
       calculatedTokenDeposit,
@@ -646,28 +630,57 @@ const CreatePresalePage = () => {
       currencyAddress,
       vestingCyclePercent,
       whitelistType,
-      nftContractAddress, // Added whitelist dependencies
+      nftContractAddress,
     ]
   );
 
   // --- Gas Estimation ---
   const { data: createGas } = useEstimateGas({
     to: factoryAddress,
-    data: encodeFunctionData({
-      abi: factoryAbi,
-      functionName: "createPresale",
-      args: [
-        presaleOptionsArgs,
-        tokenAddress || zeroAddress,
-        wethAddress ?? zeroAddress,
-        uniswapRouterAddress ?? zeroAddress,
-      ],
-    }),
+    data: (() => {
+      try {
+        // Validate all addresses before encoding
+        if (!tokenAddress || !isAddress(tokenAddress)) {
+          console.warn("Invalid token address detected during gas estimation");
+          return "0x"; // Return empty hex to prevent encoding error
+        }
+        
+        if (!factoryAddress || !isAddress(factoryAddress)) {
+          console.warn("Invalid factory address detected during gas estimation");
+          return "0x";
+        }
+        
+        if (!wethAddress || !isAddress(wethAddress)) {
+          console.warn("Invalid WETH address detected during gas estimation");
+          return "0x";
+        }
+        
+        if (!uniswapRouterAddress || !isAddress(uniswapRouterAddress)) {
+          console.warn("Invalid Uniswap Router address detected during gas estimation");
+          return "0x";
+        }
+        
+        // Only encode if all addresses are valid
+        return encodeFunctionData({
+          abi: factoryAbi,
+          functionName: "createPresale",
+          args: [
+            presaleOptionsArgs,
+            tokenAddress,
+            wethAddress,
+            uniswapRouterAddress,
+          ],
+        });
+      } catch (error) {
+        console.error("Error encoding function data:", error);
+        return "0x"; // Return empty hex to prevent encoding error
+      }
+    })(),
     value:
       factoryFeeTokenAddress === zeroAddress &&
       typeof factoryCreationFee === "bigint"
         ? factoryCreationFee
-        : 0n, // Dynamic fee for gas estimation
+        : 0n,
     account: userAddress,
     query: {
       enabled:
@@ -678,8 +691,8 @@ const CreatePresalePage = () => {
         !!tokenAddress &&
         hardCapParsed > 0n &&
         softCapParsed > 0n &&
-        presaleOptionsArgs.tokenDeposit > 0n && // Ensure deposit is calculated before estimating gas
-        !isLoadingDepositCalc, // Don't estimate if calculation is loading
+        presaleOptionsArgs.tokenDeposit > 0n &&
+        !isLoadingDepositCalc,
     },
   });
   const calculateFee = (gas: bigint | undefined) =>
@@ -716,7 +729,7 @@ const CreatePresalePage = () => {
         address: factoryFeeTokenAddress,
         abi: erc20Abi,
         functionName: "approve",
-        args: [factoryAddress, factoryCreationFee], // Approve for the exact fee amount
+        args: [factoryAddress, factoryCreationFee],
       });
       setFeeTokenApprovalHash(hash);
       toast.info("Fee Token Approval Sent", {
@@ -755,7 +768,7 @@ const CreatePresalePage = () => {
         address: tokenAddress,
         abi: erc20Abi,
         functionName: "approve",
-        args: [factoryAddress, maxUint256], // Approve for maxUint256 to avoid re-approval
+        args: [factoryAddress, maxUint256],
       });
       setApprovalHash(hash);
       toast.info("Approval Transaction Sent", {
@@ -774,111 +787,26 @@ const CreatePresalePage = () => {
   };
 
   const handleCreatePresale = async () => {
-    if (!factoryAddress || !wethAddress || !uniswapRouterAddress) {
-      const missing = !factoryAddress
-        ? "Factory"
-        : !wethAddress
-        ? "WETH"
-        : "Router";
-      setActionError(`Configuration Error: ${missing} address not available.`);
-      toast.error("Config Error", {
-        description: `${missing} address missing.`,
-      });
+    // Final validation before creating
+    if (!validateAllStages(true)) {
+      // validateAllStages will show toast on error
       return;
     }
-    // Basic form validations (already present, ensure they are comprehensive)
-    if (
-      !isConnected ||
-      !tokenAddress ||
-      !isAddress(tokenAddress) ||
-      hardCapParsed <= 0n ||
-      softCapParsed <= 0n ||
-      minContributionParsed <= 0n ||
-      maxContributionParsed < minContributionParsed ||
-      !ratePresale ||
-      !rateLiquidity ||
-      !liquidityPercent ||
-      !liquidityLockDays ||
-      !startTime ||
-      !endTime ||
-      !claimDelay ||
-      (whitelistType === 2 &&
-        (!nftContractAddress || !isAddress(nftContractAddress)))
-    ) {
-      setActionError("Please fill in all required fields correctly.");
-      toast.error("Validation Error", {
-        description: "Check all fields before creating.",
+
+    // Additional address validation to prevent runtime errors
+    if (!tokenAddress || !isAddress(tokenAddress)) {
+      toast.error("Invalid Token Address", {
+        description: "Please enter a valid token address before creating the presale."
       });
+      setCurrentStage(1); // Return to token input stage
       return;
     }
-    if (softCapParsed > hardCapParsed) {
-      setActionError("Soft Cap cannot be greater than Hard Cap.");
-      toast.error("Validation Error", {
-        description: "Soft Cap cannot exceed Hard Cap.",
+
+    if (whitelistType === 2 && (!nftContractAddress || !isAddress(nftContractAddress))) {
+      toast.error("Invalid NFT Contract Address", {
+        description: "Please enter a valid NFT contract address for whitelist."
       });
-      return;
-    }
-    if (endTime <= startTime) {
-      setActionError("End time must be after start time.");
-      toast.error("Validation Error", {
-        description: "End time must be after start time.",
-      });
-      return;
-    }
-    if (startTime <= new Date()) {
-      setActionError("Start time must be in the future.");
-      toast.error("Validation Error", {
-        description: "Start time must be in the future.",
-      });
-      return;
-    }
-    if (isLoadingDepositCalc) {
-      setActionError("Calculating required token deposit, please wait...");
-      toast.warning("Calculation Pending", {
-        description: "Waiting for token deposit calculation.",
-      });
-      return;
-    }
-    if (
-      depositCalcError ||
-      typeof calculatedTokenDeposit !== "bigint" ||
-      calculatedTokenDeposit <= 0n
-    ) {
-      setActionError(
-        `Failed to calculate required token deposit. Error: ${
-          depositCalcError?.message || "Unknown error"
-        }`
-      );
-      toast.error("Calculation Error", {
-        description: "Could not calculate token deposit.",
-      });
-      return;
-    }
-    if (!hasSufficientAllowance) {
-      setActionError(
-        "Approval Error: Presale tokens not sufficiently approved."
-      );
-      toast.error("Approval Error", {
-        description: "Presale tokens not sufficiently approved.",
-      });
-      return;
-    }
-    if (
-      factoryFeeTokenAddress &&
-      factoryFeeTokenAddress !== zeroAddress &&
-      !hasSufficientFeeTokenAllowance
-    ) {
-      setActionError("Approval Error: Fee tokens not sufficiently approved.");
-      toast.error("Approval Error", {
-        description: "Fee tokens not sufficiently approved.",
-      });
-      return;
-    }
-    if (factoryCreationFee === undefined) {
-      setActionError("Fee Error: Creation fee not loaded or invalid.");
-      toast.error("Fee Error", {
-        description: "Creation fee not loaded or invalid.",
-      });
+      setCurrentStage(3); // Return to whitelist stage
       return;
     }
 
@@ -890,20 +818,31 @@ const CreatePresalePage = () => {
           ? factoryCreationFee
           : 0n;
 
+      // Ensure all addresses are valid before proceeding
+      if (!factoryAddress || !isAddress(factoryAddress)) {
+        throw new Error("Invalid factory address configuration");
+      }
+      
+      if (!wethAddress || !isAddress(wethAddress)) {
+        throw new Error("Invalid WETH address configuration");
+      }
+      
+      if (!uniswapRouterAddress || !isAddress(uniswapRouterAddress)) {
+        throw new Error("Invalid Uniswap Router address configuration");
+      }
+
       await writeContractAsync({
-        // Removed const presaleTxHash assignment
         address: factoryAddress,
         abi: factoryAbi,
         functionName: "createPresale",
         args: [
           presaleOptionsArgs,
-          tokenAddress || zeroAddress,
+          tokenAddress,
           wethAddress,
           uniswapRouterAddress,
         ],
         value: ethToSend,
       });
-      // Removed setHash(presaleTxHash); as 'hash' from useWriteContract hook is used by useWaitForTransactionReceipt
       toast.info("Create Presale Transaction Sent", {
         description: "Waiting for confirmation...",
       });
@@ -916,6 +855,200 @@ const CreatePresalePage = () => {
       setActionError(`Presale creation failed: ${displayError}`);
       toast.error("Presale Creation Failed", { description: displayError });
     }
+  };
+
+  // --- Stage Validation Logic ---
+  const validateStage1 = useCallback(() => {
+    if (!tokenAddress || !isAddress(tokenAddress)) {
+      toast.error("Validation Error", { description: "Please enter a valid Token Address." });
+      return false;
+    }
+    if (tokenDecimals === undefined) {
+      toast.error("Validation Error", { description: "Token decimals could not be loaded." });
+      return false;
+    }
+    if (!ratePresale || parseFloat(ratePresale) <= 0) {
+      toast.error("Validation Error", { description: "Presale Rate must be a positive number." });
+      return false;
+    }
+    if (!rateLiquidity || parseFloat(rateLiquidity) <= 0) {
+      toast.error("Validation Error", { description: "Listing Rate must be a positive number." });
+      return false;
+    }
+    if (!hardCap || parseFloat(hardCap) <= 0) {
+      toast.error("Validation Error", { description: "Hard Cap must be a positive number." });
+      return false;
+    }
+    if (!softCap || parseFloat(softCap) <= 0) {
+      toast.error("Validation Error", { description: "Soft Cap must be a positive number." });
+      return false;
+    }
+    if (softCapParsed > hardCapParsed) {
+      toast.error("Validation Error", { description: "Soft Cap cannot be greater than Hard Cap." });
+      return false;
+    }
+    if (!minContribution || parseFloat(minContribution) <= 0) {
+      toast.error("Validation Error", { description: "Min Contribution must be a positive number." });
+      return false;
+    }
+    if (!maxContribution || parseFloat(maxContribution) <= 0) {
+      toast.error("Validation Error", { description: "Max Contribution must be a positive number." });
+      return false;
+    }
+    if (maxContributionParsed < minContributionParsed) {
+      toast.error("Validation Error", { description: "Max Contribution must be greater than or equal to Min Contribution." });
+      return false;
+    }
+    return true;
+  }, [
+    tokenAddress,
+    tokenDecimals,
+    ratePresale,
+    rateLiquidity,
+    hardCap,
+    softCap,
+    minContribution,
+    maxContribution,
+    softCapParsed,
+    hardCapParsed,
+    minContributionParsed,
+    maxContributionParsed,
+  ]);
+
+  const validateStage2 = useCallback(() => {
+    const liqPercentNum = parseInt(liquidityPercent || "0");
+    if (liqPercentNum <= 0 || liqPercentNum > 100) {
+      toast.error("Validation Error", { description: "Liquidity Percent must be between 1 and 100." });
+      return false;
+    }
+    if (!liquidityLockDays || parseInt(liquidityLockDays) < 0) {
+      toast.error("Validation Error", { description: "Liquidity Lock Days cannot be negative." });
+      return false;
+    }
+    if (!startTime) {
+      toast.error("Validation Error", { description: "Please select a Start Time." });
+      return false;
+    }
+    if (!endTime) {
+      toast.error("Validation Error", { description: "Please select an End Time." });
+      return false;
+    }
+    if (endTime <= startTime) {
+      toast.error("Validation Error", { description: "End Time must be after Start Time." });
+      return false;
+    }
+    if (startTime <= new Date()) {
+      toast.error("Validation Error", { description: "Start Time must be in the future." });
+      return false;
+    }
+    if (!claimDelay || parseInt(claimDelay) < 0) {
+      toast.error("Validation Error", { description: "Claim Delay cannot be negative." });
+      return false;
+    }
+    if (useVesting) {
+      const tgePercentNum = parseInt(vestingTgePercent || "0");
+      if (tgePercentNum < 0 || tgePercentNum > 100) {
+        toast.error("Validation Error", { description: "TGE Percent must be between 0 and 100." });
+        return false;
+      }
+      if (!vestingCycleDays || parseInt(vestingCycleDays) <= 0) {
+        toast.error("Validation Error", { description: "Vesting Cycle Length must be positive." });
+        return false;
+      }
+      const cyclePercentNum = parseInt(vestingCyclePercent || "0");
+      if (cyclePercentNum <= 0 || cyclePercentNum > 100) {
+        toast.error("Validation Error", { description: "Vesting Cycle Release must be between 1 and 100." });
+        return false;
+      }
+    }
+    return true;
+  }, [
+    liquidityPercent,
+    liquidityLockDays,
+    startTime,
+    endTime,
+    claimDelay,
+    useVesting,
+    vestingTgePercent,
+    vestingCycleDays,
+    vestingCyclePercent,
+  ]);
+
+  const validateStage3 = useCallback(() => {
+    if (whitelistType === 2 && (!nftContractAddress || !isAddress(nftContractAddress))) {
+      toast.error("Validation Error", { description: "Please enter a valid NFT Contract Address for NFT whitelist." });
+      return false;
+    }
+    if (isLoadingDepositCalc) {
+      toast.warning("Calculation Pending", { description: "Waiting for token deposit calculation to complete." });
+      return false;
+    }
+    if (depositCalcError || typeof calculatedTokenDeposit !== "bigint" || calculatedTokenDeposit <= 0n) {
+      toast.error("Calculation Error", { description: `Could not calculate required token deposit. Error: ${depositCalcError?.message || "Unknown error"}` });
+      return false;
+    }
+    if (!hasSufficientAllowance) {
+      toast.error("Approval Error", { description: "Presale tokens not sufficiently approved. Please approve." });
+      return false;
+    }
+    if (factoryFeeTokenAddress && factoryFeeTokenAddress !== zeroAddress && !hasSufficientFeeTokenAllowance) {
+      toast.error("Approval Error", { description: "Fee tokens not sufficiently approved. Please approve." });
+      return false;
+    }
+    if (factoryCreationFee === undefined) {
+      toast.error("Fee Error", { description: "Creation fee not loaded or invalid." });
+      return false;
+    }
+    return true;
+  }, [
+    whitelistType,
+    nftContractAddress,
+    isLoadingDepositCalc,
+    depositCalcError,
+    calculatedTokenDeposit,
+    hasSufficientAllowance,
+    factoryFeeTokenAddress,
+    hasSufficientFeeTokenAllowance,
+    factoryCreationFee,
+  ]);
+
+  // Combined validation for final submission
+  const validateAllStages = useCallback((showToast = false) => {
+    if (!validateStage1()) {
+      if (showToast) toast.error("Error in Stage 1", { description: "Please review Token & Basic Configuration." });
+      setCurrentStage(1);
+      return false;
+    }
+    if (!validateStage2()) {
+      if (showToast) toast.error("Error in Stage 2", { description: "Please review Schedule & Distribution." });
+      setCurrentStage(2);
+      return false;
+    }
+    if (!validateStage3()) {
+      if (showToast) toast.error("Error in Stage 3", { description: "Please review Security & Review." });
+      setCurrentStage(3);
+      return false;
+    }
+    return true;
+  }, [validateStage1, validateStage2, validateStage3]);
+
+  // --- Navigation Handlers ---
+  const handleNextStage = () => {
+    setActionError(""); // Clear previous errors
+    if (currentStage === 1) {
+      if (validateStage1()) {
+        setCurrentStage(2);
+      }
+    } else if (currentStage === 2) {
+      if (validateStage2()) {
+        setCurrentStage(3);
+      }
+    }
+  };
+
+  const handlePreviousStage = () => {
+    setActionError(""); // Clear previous errors
+    setCurrentStage((prev) => Math.max(1, prev - 1));
   };
 
   // --- Render Logic ---
@@ -955,7 +1088,7 @@ const CreatePresalePage = () => {
     );
   }
 
-  const isActionLoading = isWritePending || isConfirming;
+  const isActionLoading = isWritePending || isConfirming || isApproving || isConfirmingApproval || isApprovingFeeToken || isConfirmingFeeTokenApproval;
 
   // Determine if calculation is possible
   const canCalculateDeposit =
@@ -969,12 +1102,21 @@ const CreatePresalePage = () => {
     !isLoadingTokenDecimals &&
     tokenDecimals !== undefined;
 
+  const stageTitles = [
+    "Token & Basic Configuration",
+    "Schedule & Distribution",
+    "Security & Review",
+  ];
+
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-gradient-to-b from-background to-background/80 py-12 px-4 md:px-6 lg:px-8">
         <Card className="max-w-4xl mx-auto border shadow-xl bg-background/95 backdrop-blur-sm overflow-hidden">
           <CardHeader className="bg-gradient-to-r from-primary-900 to-primary-800 text-primary-foreground rounded-t-lg px-6 py-8 relative">
-            <div className="absolute inset-0 bg-[url('/api/placeholder/1000/300')] opacity-10 mix-blend-overlay"></div>
+            <div 
+              className="absolute inset-0 opacity-10 mix-blend-overlay"
+              style={{ backgroundImage: "url('/api/placeholder/1000/300')" }}
+            ></div>
             <div className="relative z-10">
               <div className="flex items-center mb-2">
                 <span className="bg-white/20 text-xs font-medium text-white px-2.5 py-1 rounded-full mr-2">
@@ -985,1270 +1127,1263 @@ const CreatePresalePage = () => {
                 </span>
               </div>
               <CardTitle className="text-3xl font-heading text-white flex items-center gap-2">
-                <Rocket className="h-6 w-6" />
+                <Rocket className="h-8 w-8" />
                 Create New Presale
               </CardTitle>
-              <CardDescription className="text-primary-100/80 mt-2 max-w-lg">
-                Set up your token presale parameters, including rates, caps, and
-                vesting schedules to launch your project on Uniswap.
+              <CardDescription className="text-white/80 mt-2">
+                Follow the steps below to launch your token presale.
               </CardDescription>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-4 right-4 text-white hover:bg-white/20 rounded-full"
-              onClick={() => navigate("/presales")}
-              aria-label="Close"
-            >
-              <X className="h-5 w-5" />
-            </Button>
-          </CardHeader>
-
-          <div className="bg-primary-50/30 border-b border-primary-100/20 px-8 py-4">
-            <div className="flex flex-wrap gap-2 items-center text-sm">
-              <div className="flex items-center text-primary-900">
-                <ClipboardCheck className="h-4 w-4 mr-1" />
-                <span className="font-medium">4-Step Process</span>
+            {/* Progress Bar */}
+            <div className="absolute bottom-0 left-0 right-0 px-6">
+              <div className="w-full h-2 bg-white/30 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-white" 
+                  style={{ width: `${(currentStage / 3) * 100}%` }}
+                ></div>
               </div>
-              <span className="text-muted-foreground mx-2">•</span>
-              <div className="flex items-center text-primary-900/70">
-                <CircleDollarSign className="h-4 w-4 mr-1" />
-                <span>Token Configuration</span>
-              </div>
-              <span className="text-muted-foreground mx-2">•</span>
-              <div className="flex items-center text-muted-foreground">
-                <CalendarIcon className="h-4 w-4 mr-1" />
-                <span>Schedule</span>
-              </div>
-              <span className="text-muted-foreground mx-2">•</span>
-              <div className="flex items-center text-muted-foreground">
-                <Lock className="h-4 w-4 mr-1" />
-                <span>Security</span>
+              <div className="flex justify-between text-xs text-white/80 mt-1.5">
+                <span>Stage {currentStage} of 3</span>
+                <span>{stageTitles[currentStage - 1]}</span>
               </div>
             </div>
-          </div>
+          </CardHeader>
 
           <CardContent className="p-8 space-y-8">
-            {/* Token Address */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Token Details
-                </h3>
-                <Badge
-                  variant="outline"
-                  className="text-xs font-normal bg-primary-50 text-primary-700 border-primary-200"
-                >
-                  Step 1 of 4
-                </Badge>
-              </div>
+            {/* Stage 1: Token & Basic Configuration */}
+            {currentStage === 1 && (
+              <div className="space-y-8 animate-fade-in">
+                {/* Token Address */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Token Details
+                    </h3>
+                  </div>
 
-              <div className="space-y-3 animate-slide-up">
-                <Label
-                  htmlFor="tokenAddress"
-                  className="text-base font-medium flex items-center"
-                >
-                  Token Address <span className="text-destructive ml-1">*</span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-popover border-input text-popover-foreground">
-                      <p className="max-w-xs">
-                        Enter the ERC-20 token contract address that you want to
-                        use for this presale.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <div className="relative">
-                 <Input
-                    id="tokenAddress"
-                    placeholder="0x..."
-                    value={tokenAddress}
-                    onChange={(e) => {
-                      let val = e.target.value.replace(/\s+/g, '');
-                      let pfx = '';
-                      if (val.toLowerCase().startsWith('0x')) {
-                        pfx = val.substring(0, 2);
-                        val = val.substring(2);
-                      }
-                      val = val.replace(/[^0-9a-fA-F]/gi, '').substring(0, 40);
-                      setTokenAddress((pfx + val) as Address);
-                    }}
-                    disabled={isActionLoading}
-                    className="text-foreground pr-10 font-mono text-sm"
-                  />
-                  {tokenAddress && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-primary-900"
-                      onClick={() =>
-                        navigator.clipboard.writeText(tokenAddress)
-                      }
+                  <div className="space-y-3 animate-slide-up">
+                    <Label
+                      htmlFor="tokenAddress"
+                      className="text-base font-medium flex items-center"
                     >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                {isLoadingTokenDecimals && (
-                  <p className="text-sm text-muted-foreground flex items-center">
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary-900" />{" "}
-                    Fetching token decimals...
-                  </p>
-                )}
-                {tokenAddress &&
-                  isAddress(tokenAddress) &&
-                  !isLoadingTokenDecimals &&
-                  tokenDecimals === undefined && (
-                    <p className="text-sm text-destructive flex items-center">
-                      <AlertCircle className="mr-2 h-4 w-4" /> Could not fetch
-                      decimals for this token.
-                    </p>
-                  )}
-                {tokenAddress &&
-                  isAddress(tokenAddress) &&
-                  !isLoadingTokenDecimals &&
-                  tokenDecimals !== undefined && (
-                    <p className="text-sm text-primary-800 bg-primary-50 py-1.5 px-3 rounded-md inline-flex items-center">
-                      <CheckCircle2 className="mr-2 h-4 w-4" /> Token Decimals:{" "}
-                      <span className="font-medium ml-1">{tokenDecimals}</span>
-                    </p>
-                  )}
-                {!tokenAddress && (
-                  <p className="text-sm text-muted-foreground flex items-center">
-                    <Info className="mr-2 h-4 w-4" /> Enter the address of the
-                    token you want to sell.
-                  </p>
-                )}
-              </div>
-
-              {/* Currency */}
-              <div className="space-y-3 animate-slide-up">
-                <Label className="text-base font-medium">Currency</Label>
-                <div className="flex items-center space-x-2 bg-muted p-3 rounded-md text-muted-foreground border border-input">
-                  <div className="bg-primary-100 text-primary-800 p-1.5 rounded-full">
-                    <Coins className="h-5 w-5" />
-                  </div>
-                  <span className="flex-1">ETH (Native Currency)</span>
-                  <Badge
-                    variant="secondary"
-                    className="bg-primary-50 text-primary-700 border-none"
-                  >
-                    Default
-                  </Badge>
-                </div>
-              </div>
-            </section>
-
-            {/* Rates */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Pricing & Rates
-                </h3>
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <ArrowDownUp className="h-4 w-4 mr-1" />
-                  <span>Token Economics</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="ratePresale"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Presale Rate{" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="ratePresale"
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={`e.g., ${DEFAULT_LISTING_RATE}`}
-                      value={ratePresale}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setRatePresale,
-                          false
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <Hash className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    How many tokens per 1 ETH?
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="rateLiquidity"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Listing Rate{" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="rateLiquidity"
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={`e.g., ${DEFAULT_LIQUIDITY_RATE}`}
-                      value={rateLiquidity}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setRateLiquidity,
-                          false
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <Hash className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Initial Uniswap listing rate (tokens per 1 ETH).
-                  </p>
-                  <Alert className="mt-2 bg-primary-50 border-primary-100 text-primary-900">
-                    <Info className="h-4 w-4" />
-                    <AlertDescription className="text-sm">
-                      The listing rate determines the initial price on the DEX
-                      after presale completion.
-                    </AlertDescription>
-                  </Alert>
-                </div>
-              </div>
-            </section>
-
-            {/* Caps */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Funding Caps
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="hardCap"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Hard Cap (ETH){" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="hardCap"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="e.g., 100"
-                      value={hardCap}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setHardCap,
-                          true,
-                          undefined,
-                          currencyDecimals
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <BadgeEuro className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      Maximum ETH to raise.
-                    </p>
-                    {hardCap &&
-                      softCap &&
-                      parseFloat(hardCap) > 0 &&
-                      parseFloat(softCap) > 0 && (
-                        <p className="text-xs text-primary-900">
-                          {(
-                            (parseFloat(softCap) / parseFloat(hardCap)) *
-                            100
-                          ).toFixed(0)}
-                          % ratio
-                        </p>
-                      )}
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="softCap"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Soft Cap (ETH){" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="softCap"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="e.g., 50"
-                      value={softCap}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setSoftCap,
-                          true,
-                          undefined,
-                          currencyDecimals
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <BadgeEuro className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Minimum ETH needed for success.
-                  </p>
-                </div>
-              </div>
-
-              {hardCap &&
-                softCap &&
-                parseFloat(hardCap) > 0 &&
-                parseFloat(softCap) > 0 && (
-                  <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-primary-700 to-primary-500 h-2.5 rounded-full"
-                      style={{
-                        width: `${Math.max(
-                          10,
-                          Math.min(
-                            100,
-                            (parseFloat(softCap) / parseFloat(hardCap)) * 100
-                          )
-                        )}%`,
-                      }}
-                    ></div>
-                  </div>
-                )}
-            </section>
-
-            {/* Contributions */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Participant Limits
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="minContribution"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Min Contribution (ETH){" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="minContribution"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="e.g., 0.1"
-                      value={minContribution}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setMinContribution,
-                          true,
-                          undefined,
-                          currencyDecimals
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <ArrowDown className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Minimum ETH per wallet.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="maxContribution"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Max Contribution (ETH){" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="maxContribution"
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="e.g., 5"
-                      value={maxContribution}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setMaxContribution,
-                          true,
-                          undefined,
-                          currencyDecimals
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <ArrowUp className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Maximum ETH per wallet.
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            {/* Liquidity */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Liquidity Settings
-                </h3>
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Droplets className="h-4 w-4 mr-1" />
-                  <span>Uniswap Integration</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="liquidityPercent"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Liquidity Percent (%){" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="liquidityPercent"
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={`e.g., ${DEFAULT_LIQUIDITY_PERCENT}`}
-                      value={liquidityPercent}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setLiquidityPercent,
-                          false,
-                          3,
-                          0,
-                          100
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <Percent className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Funds allocated for Uniswap liquidity.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="liquidityLockDays"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Liquidity Lockup (Days){" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="liquidityLockDays"
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={`e.g., ${DEFAULT_LIQUIDITY_LOCK_DAYS}`}
-                      value={liquidityLockDays}
-                      onChange={(e) =>
-                        handleNumericInput(
-                          e.target.value,
-                          setLiquidityLockDays,
-                          false
-                        )
-                      }
-                      disabled={isActionLoading}
-                      className="text-foreground pl-10"
-                    />
-                    <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                      <Lock className="h-4 w-4" />
-                    </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Days liquidity is locked after presale.
-                  </p>
-                </div>
-              </div>
-            </section>
-
-            {/* Dates & Times */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Schedule
-                </h3>
-                <Badge
-                  variant="outline"
-                  className="text-xs font-normal bg-primary-50 text-primary-700 border-primary-200"
-                >
-                  Step 2 of 4
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="startTime"
-                    className="text-base font-medium flex items-center"
-                  >
-                    Start Time <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal text-foreground border-input group",
-                          !startTime && "text-muted-foreground"
-                        )}
-                        disabled={isActionLoading}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 text-primary-900 group-hover:text-primary-800" />
-                        {startTime ? (
-                          format(startTime, "PPP HH:mm")
-                        ) : (
-                          <span>Pick a date and time</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-card border-input shadow-card">
-                      <Calendar
-                        mode="single"
-                        selected={startTime}
-                        onSelect={setStartTime}
-                        initialFocus
-                        className="rounded-t-md border-b"
-                      />
-                      <div className="p-3 border-t border-input">
-                        <div className="flex items-center">
-                          <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            type="time"
-                            value={startTime ? format(startTime, "HH:mm") : ""}
-                            onChange={(e) => {
-                              const [hours, minutes] = e.target.value
-                                .split(":")
-                                .map(Number);
-                              const newDate = startTime
-                                ? new Date(startTime)
-                                : new Date();
-                              newDate.setHours(hours, minutes);
-                              setStartTime(newDate);
-                            }}
-                            className="text-foreground"
-                          />
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  <p className="text-sm text-muted-foreground">
-                    Presale start time (UTC).
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  <Label
-                    htmlFor="endTime"
-                    className="text-base font-medium flex items-center"
-                  >
-                    End Time <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal text-foreground border-input group",
-                          !endTime && "text-muted-foreground"
-                        )}
-                        disabled={isActionLoading}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 text-primary-900 group-hover:text-primary-800" />
-                        {endTime ? (
-                          format(endTime, "PPP HH:mm")
-                        ) : (
-                          <span>Pick a date and time</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 bg-card border-input shadow-card">
-                      <Calendar
-                        mode="single"
-                        selected={endTime}
-                        onSelect={setEndTime}
-                        initialFocus
-                        className="rounded-t-md border-b"
-                      />
-                      <div className="p-3 border-t border-input">
-                        <div className="flex items-center">
-                          <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                          <Input
-                            type="time"
-                            value={endTime ? format(endTime, "HH:mm") : ""}
-                            onChange={(e) => {
-                              const [hours, minutes] = e.target.value
-                                .split(":")
-                                .map(Number);
-                              const newDate = endTime
-                                ? new Date(endTime)
-                                : new Date();
-                              newDate.setHours(hours, minutes);
-                              setEndTime(newDate);
-                            }}
-                            className="text-foreground"
-                          />
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                  <p className="text-sm text-muted-foreground">
-                    Presale end time (UTC).
-                  </p>
-                </div>
-              </div>
-
-              {startTime && endTime && (
-                <div className="px-4 py-3 bg-primary-50 rounded-lg border border-primary-100 text-primary-900 flex items-center text-sm">
-                  <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
-                  <div>
-                    <span className="font-medium">Duration: </span>
-                    {(() => {
-                      const diffMs = endTime.getTime() - startTime.getTime();
-                      const diffDays = Math.floor(
-                        diffMs / (1000 * 60 * 60 * 24)
-                      );
-                      const diffHours = Math.floor(
-                        (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
-                      );
-                      return `${diffDays} days, ${diffHours} hours`;
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* Claim Delay */}
-              <div className="space-y-3 animate-slide-up mt-4">
-                <Label
-                  htmlFor="claimDelay"
-                  className="text-base font-medium flex items-center"
-                >
-                  Claim Delay (Minutes){" "}
-                  <span className="text-destructive ml-1">*</span>
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="claimDelay"
-                    type="text"
-                    inputMode="numeric"
-                    placeholder={`e.g., ${DEFAULT_CLAIM_DELAY_MINUTES}`}
-                    value={claimDelay}
-                    onChange={(e) =>
-                      handleNumericInput(e.target.value, setClaimDelay, false)
-                    }
-                    disabled={isActionLoading}
-                    className="text-foreground pl-10"
-                  />
-                  <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Delay before token claims are available after presale end.
-                </p>
-              </div>
-            </section>
-
-            {/* Vesting Options */}
-            <section className="space-y-6">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Distribution & Vesting
-                </h3>
-                <Badge
-                  variant="outline"
-                  className="text-xs font-normal bg-primary-50 text-primary-700 border-primary-200"
-                >
-                  Step 3 of 4
-                </Badge>
-              </div>
-
-              <Card className="bg-muted/50 border shadow-sm animate-slide-up overflow-hidden">
-                <CardHeader className="bg-gradient-to-r from-primary-50/80 to-primary-50/30 border-b border-primary-100/30">
-                  <CardTitle className="text-lg font-heading flex items-center">
-                    <div className="flex items-center justify-center w-6 h-6 bg-primary-100 rounded-full mr-2">
-                      <Checkbox
-                        id="useVesting"
-                        checked={useVesting}
-                        onCheckedChange={(checked) =>
-                          setUseVesting(Boolean(checked))
-                        }
-                        className="border-primary-900 data-[state=checked]:bg-primary-900"
-                        disabled={isActionLoading}
-                      />
-                    </div>
-                    <Label htmlFor="useVesting" className="cursor-pointer">
-                      Enable Vesting (Optional)
-                    </Label>
-                  </CardTitle>
-                  <CardDescription className="text-muted-foreground">
-                    Distribute tokens gradually over time instead of all at
-                    once.
-                  </CardDescription>
-                </CardHeader>
-                {useVesting && (
-                  <CardContent className="space-y-6 pt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="space-y-3">
-                        <Label
-                          htmlFor="vestingTgePercent"
-                          className="text-base font-medium"
-                        >
-                          TGE Percent (%)
-                          <span className="text-destructive ml-1">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="vestingTgePercent"
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="e.g., 10"
-                            value={vestingTgePercent}
-                            onChange={(e) =>
-                              handleNumericInput(
-                                e.target.value,
-                                setVestingTgePercent,
-                                false,
-                                3,
-                                0,
-                                100
-                              )
-                            }
-                            disabled={isActionLoading}
-                            className="text-foreground pr-8"
-                          />
-                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-muted-foreground">
-                            %
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Percentage released at Token Generation Event.
-                        </p>
-                      </div>
-                      <div className="space-y-3">
-                        <Label
-                          htmlFor="vestingCycleDays"
-                          className="text-base font-medium"
-                        >
-                          Cycle Length (Days)
-                          <span className="text-destructive ml-1">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="vestingCycleDays"
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="e.g., 30"
-                            value={vestingCycleDays}
-                            onChange={(e) =>
-                              handleNumericInput(
-                                e.target.value,
-                                setVestingCycleDays,
-                                false
-                              )
-                            }
-                            disabled={isActionLoading}
-                            className="text-foreground pl-10"
-                          />
-                          <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
-                            <CalendarIcon className="h-4 w-4" />
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Duration of each vesting cycle in days.
-                        </p>
-                      </div>
-                      <div className="space-y-3">
-                        <Label
-                          htmlFor="vestingCyclePercent"
-                          className="text-base font-medium"
-                        >
-                          Cycle Release (%)
-                          <span className="text-destructive ml-1">*</span>
-                        </Label>
-                        <div className="relative">
-                          <Input
-                            id="vestingCyclePercent"
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="e.g., 10"
-                            value={vestingCyclePercent}
-                            onChange={(e) =>
-                              handleNumericInput(
-                                e.target.value,
-                                setVestingCyclePercent,
-                                false,
-                                3,
-                                0,
-                                100
-                              )
-                            }
-                            disabled={isActionLoading}
-                            className="text-foreground pr-8"
-                          />
-                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-muted-foreground">
-                            %
-                          </div>
-                        </div>
-                        <p className="text-sm text-muted-foreground">
-                          Percentage released per cycle.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            </section>
-
-            {/* Leftover Tokens */}
-            <section className="space-y-6 animate-slide-up">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Unsold Tokens
-                </h3>
-              </div>
-              <div className="space-y-3">
-                <Label
-                  htmlFor="leftoverTokenOption"
-                  className="text-base font-medium flex items-center"
-                >
-                  Unsold Token Handling{" "}
-                  <span className="text-destructive ml-1">*</span>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-popover border-input text-popover-foreground">
-                      <p className="max-w-xs">
-                        Choose what happens to tokens that remain unsold after
-                        the presale ends.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <Select
-                  onValueChange={(value) =>
-                    setLeftoverTokenOption(Number(value))
-                  }
-                  defaultValue={leftoverTokenOption.toString()}
-                  disabled={isActionLoading}
-                >
-                  <SelectTrigger
-                    id="leftoverTokenOption"
-                    className="select-trigger"
-                  >
-                    <SelectValue placeholder="Select an option" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-input">
-                    <SelectItem value="0">Burn</SelectItem>
-                    <SelectItem value="1">Refund to Creator</SelectItem>
-                    <SelectItem value="2">
-                      Send to Treasury (Requires Treasury Address)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">
-                  Handle tokens not sold during the presale.
-                </p>
-              </div>
-            </section>
-
-            {/* Whitelist Options */}
-            <section className="space-y-6 animate-slide-up">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Access Control
-                </h3>
-                <Badge
-                  variant="outline"
-                  className="text-xs font-normal bg-primary-50 text-primary-700 border-primary-200"
-                >
-                  Step 4 of 4
-                </Badge>
-              </div>
-              <div className="space-y-3">
-                <Label
-                  htmlFor="whitelist-type"
-                  className="text-base font-medium flex items-center"
-                >
-                  Whitelist Type
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-popover border-input text-popover-foreground">
-                      <p className="max-w-xs">
-                        Restrict presale participation to specific groups, such
-                        as NFT holders.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <Select
-                  value={whitelistType.toString()}
-                  onValueChange={(value) => setWhitelistType(parseInt(value))}
-                  disabled={isActionLoading}
-                >
-                  <SelectTrigger id="whitelist-type" className="select-trigger">
-                    <SelectValue placeholder="Select whitelist type" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-card border-input">
-                    <SelectItem value="0">None (Public)</SelectItem>
-                    <SelectItem value="2">NFT Holder</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-sm text-muted-foreground">
-                  Control who can participate in the presale.
-                </p>
-              </div>
-              {whitelistType === 2 && (
-                <div className="space-y-3 animate-slide-up">
-                  <Label
-                    htmlFor="nft-address"
-                    className="text-base font-medium flex items-center"
-                  >
-                    NFT Contract Address{" "}
-                    <span className="text-destructive ml-1">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Input
-                      id="nft-address"
-                      value={nftContractAddress}
-                      onChange={(e) =>
-                        setNftContractAddress(e.target.value as Address)
-                      }
-                      placeholder="0x..."
-                      className="text-foreground pr-10 font-mono text-sm"
-                      disabled={isActionLoading}
-                    />
-                    {nftContractAddress && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-primary-900"
-                        onClick={() =>
-                          navigator.clipboard.writeText(nftContractAddress)
-                        }
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  {whitelistType === 2 &&
-                    (!nftContractAddress || !isAddress(nftContractAddress)) && (
-                      <p className="text-sm text-destructive flex items-center">
-                        <AlertCircle className="mr-2 h-4 w-4" /> Enter a valid
-                        NFT contract address.
-                      </p>
-                    )}
-                  <p className="text-sm text-muted-foreground">
-                    Enter the NFT contract address for whitelist eligibility.
-                  </p>
-                </div>
-              )}
-            </section>
-
-            {/* Calculated Token Deposit Display */}
-            <section className="space-y-6 animate-slide-up">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Token Deposit
-                </h3>
-              </div>
-              <div className="space-y-3">
-                <Label className="text-base font-medium flex items-center">
-                  Required Token Deposit
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
-                    </TooltipTrigger>
-                    <TooltipContent className="bg-popover border-input text-popover-foreground">
-                      <p className="max-w-xs">
-                        Total tokens required for the presale and liquidity pool
-                        based on your settings.
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                </Label>
-                <div className="p-4 border border-input rounded-md bg-muted min-h-[48px] flex items-center">
-                  {isLoadingDepositCalc && (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary-900" />
-                  )}
-                  {canCalculateDeposit &&
-                  !isLoadingDepositCalc &&
-                  typeof calculatedTokenDeposit === "bigint" &&
-                  tokenDecimals !== undefined ? (
-                    <span className="text-foreground font-medium">
-                      {formatUnits(calculatedTokenDeposit, tokenDecimals)}{" "}
-                      Tokens
-                    </span>
-                  ) : canCalculateDeposit && isLoadingDepositCalc ? (
-                    <span className="text-muted-foreground">
-                      Calculating...
-                    </span>
-                  ) : depositCalcError ? (
-                    <span className="text-destructive text-sm flex items-center">
-                      <AlertCircle className="mr-2 h-4 w-4" /> Error calculating
-                      deposit.
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      Fill required fields to calculate.
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Total tokens needed for presale and liquidity.
-                </p>
-              </div>
-            </section>
-
-            {/* Fees & Summary */}
-            <section className="space-y-6 animate-slide-up">
-              <div className="flex items-center justify-between border-b border-muted pb-2">
-                <h3 className="text-lg font-medium text-foreground">
-                  Summary & Fees
-                </h3>
-              </div>
-              <Card className="bg-muted/50 border shadow-sm">
-                <CardContent className="space-y-4 pt-6">
-                  <div className="flex justify-between text-base">
-                    <span className="flex items-center">
-                      Creation Fee
+                      Token Address <span className="text-destructive ml-1">*</span>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent className="bg-popover border-input text-popover-foreground">
                           <p className="max-w-xs">
-                            Fee charged by the presale factory to create the
-                            presale.
+                            Enter the ERC-20 token contract address that you want to
+                            use for this presale.
                           </p>
                         </TooltipContent>
                       </Tooltip>
-                    </span>
-                    <span>
-                      {isLoadingFactoryCreationFee ||
-                      isLoadingFactoryFeeToken ||
-                      isLoadingFactoryFeeTokenDecimals ||
-                      isLoadingFactoryFeeTokenSymbol ? (
-                        <span className="flex items-center">
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary-900" />{" "}
-                          Loading fee...
-                        </span>
-                      ) : factoryCreationFee !== undefined &&
-                        factoryFeeTokenDecimals !== undefined &&
-                        factoryFeeTokenSymbol ? (
-                        <span className="font-medium">
-                          {formatUnits(
-                            factoryCreationFee,
-                            factoryFeeTokenDecimals
-                          )}{" "}
-                          {factoryFeeTokenSymbol}
-                        </span>
-                      ) : (
-                        <span className="text-destructive flex items-center">
-                          <AlertCircle className="mr-2 h-4 w-4" /> Error loading
-                          fee
-                        </span>
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="tokenAddress"
+                        placeholder="0x..."
+                        value={tokenAddress}
+                        onChange={(e) => {
+                          let val = e.target.value.replace(/\s+/g, "");
+                          let pfx = "";
+                          if (val.toLowerCase().startsWith("0x")) {
+                            pfx = val.substring(0, 2);
+                            val = val.substring(2);
+                          }
+                          val = val.replace(/[^0-9a-fA-F]/gi, "").substring(0, 40);
+                          setTokenAddress((pfx + val) as Address);
+                        }}
+                        disabled={isActionLoading}
+                        className={`text-foreground pr-10 font-mono text-sm ${
+                          tokenAddress && !isAddress(tokenAddress) ? "border-destructive focus-visible:ring-destructive" : ""
+                        }`}
+                      />
+                      {tokenAddress && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-primary-900"
+                          onClick={() =>
+                            navigator.clipboard.writeText(tokenAddress)
+                          }
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
                       )}
-                    </span>
+                    </div>
+                    {isLoadingTokenDecimals && (
+                      <p className="text-sm text-muted-foreground flex items-center">
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary-900" />{" "}
+                        Fetching token decimals...
+                      </p>
+                    )}
+                    {tokenAddress && !isAddress(tokenAddress) && (
+                      <p className="text-sm text-destructive flex items-center">
+                        <AlertCircle className="mr-2 h-4 w-4" /> 
+                        {(tokenAddress as string).startsWith("0x") ? (
+                          (tokenAddress as string).length < 42 ? 
+                            `Address is ${42 - (tokenAddress as string).length} character${42 - (tokenAddress as string).length === 1 ? '' : 's'} short` : 
+                            (tokenAddress as string).length > 42 ? 
+                              `Address is ${(tokenAddress as string).length - 42} character${(tokenAddress as string).length - 42 === 1 ? '' : 's'} too long` : 
+                              "Invalid address format"
+                        ) : "Address must start with 0x"}
+                      </p>
+                    )}
+                    {tokenAddress &&
+                      isAddress(tokenAddress) &&
+                      !isLoadingTokenDecimals &&
+                      tokenDecimals === undefined && (
+                        <p className="text-sm text-destructive flex items-center">
+                          <AlertCircle className="mr-2 h-4 w-4" /> Could not fetch
+                          decimals for this token.
+                        </p>
+                      )}
+                    {tokenAddress &&
+                      isAddress(tokenAddress) &&
+                      !isLoadingTokenDecimals &&
+                      tokenDecimals !== undefined && (
+                        <p className="text-sm text-primary-800 bg-primary-50 py-1.5 px-3 rounded-md inline-flex items-center">
+                          <CheckCircle2 className="mr-2 h-4 w-4" /> Token Decimals:{" "}
+                          <span className="font-medium ml-1">{tokenDecimals}</span>
+                        </p>
+                      )}
+                    {!tokenAddress && (
+                      <p className="text-sm text-muted-foreground flex items-center">
+                        <Info className="mr-2 h-4 w-4" /> Enter the address of the
+                        token you want to sell.
+                      </p>
+                    )}
                   </div>
-                  {createFeeCost !== undefined && (
-                    <div className="flex justify-between text-base">
-                      <span className="flex items-center">
-                        Estimated Gas Fee
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent className="bg-popover border-input text-popover-foreground">
-                            <p className="max-w-xs">
-                              Estimated Ethereum network gas fee for deploying
-                              the presale contract.
+
+                  {/* Currency */}
+                  <div className="space-y-3 animate-slide-up">
+                    <Label className="text-base font-medium">Currency</Label>
+                    <div className="flex items-center space-x-2 bg-muted p-3 rounded-md text-muted-foreground border border-input">
+                      <div className="bg-primary-100 text-primary-800 p-1.5 rounded-full">
+                        <Coins className="h-5 w-5" />
+                      </div>
+                      <span className="flex-1">ETH (Native Currency)</span>
+                      <Badge
+                        variant="secondary"
+                        className="bg-primary-50 text-primary-700 border-none"
+                      >
+                        Default
+                      </Badge>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Rates */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Pricing & Rates
+                    </h3>
+                    <div className="flex items-center text-sm text-muted-foreground">
+                      <ArrowDownUp className="h-4 w-4 mr-1" />
+                      <span>Token Economics</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="ratePresale"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Presale Rate{" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="ratePresale"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder={`e.g., ${DEFAULT_LISTING_RATE}`}
+                          value={ratePresale}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setRatePresale,
+                              false
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <Hash className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        How many tokens per 1 ETH?
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="rateLiquidity"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Listing Rate{" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="rateLiquidity"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder={`e.g., ${DEFAULT_LIQUIDITY_RATE}`}
+                          value={rateLiquidity}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setRateLiquidity,
+                              false
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <Hash className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Initial Uniswap listing rate (tokens per 1 ETH).
+                      </p>
+                      <Alert className="mt-2 bg-primary-50 border-primary-100 text-primary-900">
+                        <Info className="h-4 w-4" />
+                        <AlertDescription className="text-sm">
+                          The listing rate determines the initial price on the DEX
+                          after presale completion.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Caps */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Funding Caps
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="hardCap"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Hard Cap (ETH){" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="hardCap"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="e.g., 100"
+                          value={hardCap}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setHardCap,
+                              true,
+                              undefined,
+                              currencyDecimals
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <BadgeEuro className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                          Maximum ETH to raise.
+                        </p>
+                        {hardCap &&
+                          softCap &&
+                          parseFloat(hardCap) > 0 &&
+                          parseFloat(softCap) > 0 && (
+                            <p className="text-xs text-primary-900">
+                              {(
+                                (parseFloat(softCap) / parseFloat(hardCap)) *
+                                100
+                              ).toFixed(0)}
+                              % ratio
                             </p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </span>
-                      <span className="font-medium">
-                        <EstimatedFeeDisplay label="" fee={createFeeCost} />
-                      </span>
+                          )}
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="softCap"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Soft Cap (ETH){" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="softCap"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="e.g., 50"
+                          value={softCap}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setSoftCap,
+                              true,
+                              undefined,
+                              currencyDecimals
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <BadgeEuro className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Minimum ETH needed for success.
+                      </p>
+                    </div>
+                  </div>
+
+                  {hardCap &&
+                    softCap &&
+                    parseFloat(hardCap) > 0 &&
+                    parseFloat(softCap) > 0 && (
+                      <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-primary-700 to-primary-500 h-2.5 rounded-full"
+                          style={{
+                            width: `${Math.max(
+                              10,
+                              Math.min(
+                                100,
+                                (parseFloat(softCap) / parseFloat(hardCap)) * 100
+                              )
+                            )}%`,
+                          }}
+                        ></div>
+                      </div>
+                    )}
+                </section>
+
+                {/* Contributions */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Participant Limits
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="minContribution"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Min Contribution (ETH){" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="minContribution"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="e.g., 0.1"
+                          value={minContribution}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setMinContribution,
+                              true,
+                              undefined,
+                              currencyDecimals
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <ArrowDown className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Minimum amount each participant can contribute.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="maxContribution"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Max Contribution (ETH){" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="maxContribution"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="e.g., 5"
+                          value={maxContribution}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setMaxContribution,
+                              true,
+                              undefined,
+                              currencyDecimals
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <ArrowUp className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Maximum amount each participant can contribute.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* Stage 2: Schedule & Distribution */}
+            {currentStage === 2 && (
+              <div className="space-y-8 animate-fade-in">
+                {/* Dates & Times */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Schedule
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="startTime"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Start Time <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal text-foreground border-input group",
+                              !startTime && "text-muted-foreground"
+                            )}
+                            disabled={isActionLoading}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-primary-900 group-hover:text-primary-800" />
+                            {startTime ? (
+                              format(startTime, "PPP HH:mm")
+                            ) : (
+                              <span>Pick a date and time</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-card border-input shadow-card">
+                          <Calendar
+                            mode="single"
+                            selected={startTime}
+                            onSelect={setStartTime}
+                            initialFocus
+                            className="rounded-t-md border-b"
+                          />
+                          <div className="p-3 border-t border-input">
+                            <div className="flex items-center">
+                              <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                type="time"
+                                value={startTime ? format(startTime, "HH:mm") : ""}
+                                onChange={(e) => {
+                                  const [hours, minutes] = e.target.value
+                                    .split(":")
+                                    .map(Number);
+                                  const newDate = startTime
+                                    ? new Date(startTime)
+                                    : new Date();
+                                  newDate.setHours(hours, minutes);
+                                  setStartTime(newDate);
+                                }}
+                                className="text-foreground"
+                              />
+                            </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-sm text-muted-foreground">
+                        Presale start time (UTC).
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="endTime"
+                        className="text-base font-medium flex items-center"
+                      >
+                        End Time <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full justify-start text-left font-normal text-foreground border-input group",
+                              !endTime && "text-muted-foreground"
+                            )}
+                            disabled={isActionLoading}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4 text-primary-900 group-hover:text-primary-800" />
+                            {endTime ? (
+                              format(endTime, "PPP HH:mm")
+                            ) : (
+                              <span>Pick a date and time</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0 bg-card border-input shadow-card">
+                          <Calendar
+                            mode="single"
+                            selected={endTime}
+                            onSelect={setEndTime}
+                            initialFocus
+                            className="rounded-t-md border-b"
+                          />
+                          <div className="p-3 border-t border-input">
+                            <div className="flex items-center">
+                              <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
+                              <Input
+                                type="time"
+                                value={endTime ? format(endTime, "HH:mm") : ""}
+                                onChange={(e) => {
+                                  const [hours, minutes] = e.target.value
+                                    .split(":")
+                                    .map(Number);
+                                  const newDate = endTime
+                                    ? new Date(endTime)
+                                    : new Date();
+                                  newDate.setHours(hours, minutes);
+                                  setEndTime(newDate);
+                                }}
+                                className="text-foreground"
+                              />
+                            </div>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                      <p className="text-sm text-muted-foreground">
+                        Presale end time (UTC).
+                      </p>
+                    </div>
+                  </div>
+
+                  {startTime && endTime && (
+                    <div className="px-4 py-3 bg-primary-50 rounded-lg border border-primary-100 text-primary-900 flex items-center text-sm">
+                      <Clock className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium">Duration: </span>
+                        {(() => {
+                          const diffMs = endTime.getTime() - startTime.getTime();
+                          const diffDays = Math.floor(
+                            diffMs / (1000 * 60 * 60 * 24)
+                          );
+                          const diffHours = Math.floor(
+                            (diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+                          );
+                          return `${diffDays} days, ${diffHours} hours`;
+                        })()}
+                      </div>
                     </div>
                   )}
-                  {actionError && (
-                    <Alert
-                      variant="destructive"
-                      className="mt-4 bg-destructive/10 border-destructive/20 text-destructive"
-                    >
-                      <AlertCircle className="h-5 w-5" />
-                      <AlertTitle className="text-base font-heading">
-                        Error
-                      </AlertTitle>
-                      <AlertDescription className="text-sm">
-                        {actionError}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-                </CardContent>
-              </Card>
-            </section>
 
-            {/* Action Buttons */}
-            <section className="space-y-6 animate-slide-up">
-              {isConnected &&
-              tokenAddress &&
-              isAddress(tokenAddress) &&
-              factoryAddress &&
-              typeof calculatedTokenDeposit === "bigint" &&
-              calculatedTokenDeposit > 0n &&
-              factoryCreationFee !== undefined &&
-              factoryFeeTokenAddress !== undefined &&
-              !configError ? (
-                !hasSufficientAllowance ? (
-                  <Button
-                    onClick={handleApprove}
-                    disabled={
-                      isLoadingDepositCalc ||
-                      isApproving ||
-                      isConfirmingApproval ||
-                      isLoadingFactoryCreationFee ||
-                      isLoadingFactoryFeeToken
-                    }
-                    className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white text-lg py-6 hover:from-primary-800 hover:to-primary-700"
-                  >
-                    {isApproving || isConfirmingApproval ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
-                        Approving Presale Tokens...
-                      </>
-                    ) : (
-                      "Approve Presale Tokens"
+                  {/* Claim Delay */}
+                  <div className="space-y-3 animate-slide-up mt-4">
+                    <Label
+                      htmlFor="claimDelay"
+                      className="text-base font-medium flex items-center"
+                    >
+                      Claim Delay (Minutes){" "}
+                      <span className="text-destructive ml-1">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="claimDelay"
+                        type="text"
+                        inputMode="numeric"
+                        placeholder={`e.g., ${DEFAULT_CLAIM_DELAY_MINUTES}`}
+                        value={claimDelay}
+                        onChange={(e) =>
+                          handleNumericInput(e.target.value, setClaimDelay, false)
+                        }
+                        disabled={isActionLoading}
+                        className="text-foreground pl-10"
+                      />
+                      <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Delay before token claims are available after presale end.
+                    </p>
+                  </div>
+                </section>
+
+                {/* Liquidity Settings */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Liquidity Settings
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-slide-up">
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="liquidityPercent"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Liquidity Percent (%){" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="liquidityPercent"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder={`e.g., ${DEFAULT_LIQUIDITY_PERCENT}`}
+                          value={liquidityPercent}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setLiquidityPercent,
+                              false,
+                              3,
+                              0,
+                              100
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pr-8"
+                        />
+                        <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-muted-foreground">
+                          %
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Percentage of raised ETH used for Uniswap liquidity.
+                      </p>
+                    </div>
+                    <div className="space-y-3">
+                      <Label
+                        htmlFor="liquidityLockDays"
+                        className="text-base font-medium flex items-center"
+                      >
+                        Liquidity Lock (Days){" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="liquidityLockDays"
+                          type="text"
+                          inputMode="numeric"
+                          placeholder={`e.g., ${DEFAULT_LIQUIDITY_LOCK_DAYS}`}
+                          value={liquidityLockDays}
+                          onChange={(e) =>
+                            handleNumericInput(
+                              e.target.value,
+                              setLiquidityLockDays,
+                              false
+                            )
+                          }
+                          disabled={isActionLoading}
+                          className="text-foreground pl-10"
+                        />
+                        <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                          <Lock className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Days liquidity is locked after presale.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Vesting Options */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Distribution & Vesting
+                    </h3>
+                  </div>
+
+                  <Card className="bg-muted/50 border shadow-sm animate-slide-up overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-primary-50/80 to-primary-50/30 border-b border-primary-100/30">
+                      <CardTitle className="text-lg font-heading flex items-center">
+                        <div className="flex items-center justify-center w-6 h-6 bg-primary-100 rounded-full mr-2">
+                          <Checkbox
+                            id="useVesting"
+                            checked={useVesting}
+                            onCheckedChange={(checked) =>
+                              setUseVesting(Boolean(checked))
+                            }
+                            className="border-primary-900 data-[state=checked]:bg-primary-900"
+                            disabled={isActionLoading}
+                          />
+                        </div>
+                        <Label htmlFor="useVesting" className="cursor-pointer">
+                          Enable Vesting (Optional)
+                        </Label>
+                      </CardTitle>
+                      <CardDescription className="text-muted-foreground">
+                        Distribute tokens gradually over time instead of all at
+                        once.
+                      </CardDescription>
+                    </CardHeader>
+                    {useVesting && (
+                      <CardContent className="space-y-6 pt-6">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div className="space-y-3">
+                            <Label
+                              htmlFor="vestingTgePercent"
+                              className="text-base font-medium"
+                            >
+                              TGE Percent (%)
+                              <span className="text-destructive ml-1">*</span>
+                            </Label>
+                            <div className="relative">
+                              <Input
+                                id="vestingTgePercent"
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="e.g., 10"
+                                value={vestingTgePercent}
+                                onChange={(e) =>
+                                  handleNumericInput(
+                                    e.target.value,
+                                    setVestingTgePercent,
+                                    false,
+                                    3,
+                                    0,
+                                    100
+                                  )
+                                }
+                                disabled={isActionLoading}
+                                className="text-foreground pr-8"
+                              />
+                              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-muted-foreground">
+                                %
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Percentage released at Token Generation Event.
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <Label
+                              htmlFor="vestingCycleDays"
+                              className="text-base font-medium"
+                            >
+                              Cycle Length (Days)
+                              <span className="text-destructive ml-1">*</span>
+                            </Label>
+                            <div className="relative">
+                              <Input
+                                id="vestingCycleDays"
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="e.g., 30"
+                                value={vestingCycleDays}
+                                onChange={(e) =>
+                                  handleNumericInput(
+                                    e.target.value,
+                                    setVestingCycleDays,
+                                    false
+                                  )
+                                }
+                                disabled={isActionLoading}
+                                className="text-foreground pl-10"
+                              />
+                              <div className="absolute inset-y-0 left-0 px-3 flex items-center pointer-events-none text-muted-foreground">
+                                <CalendarIcon className="h-4 w-4" />
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Duration of each vesting cycle in days.
+                            </p>
+                          </div>
+                          <div className="space-y-3">
+                            <Label
+                              htmlFor="vestingCyclePercent"
+                              className="text-base font-medium"
+                            >
+                              Cycle Release (%)
+                              <span className="text-destructive ml-1">*</span>
+                            </Label>
+                            <div className="relative">
+                              <Input
+                                id="vestingCyclePercent"
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="e.g., 10"
+                                value={vestingCyclePercent}
+                                onChange={(e) =>
+                                  handleNumericInput(
+                                    e.target.value,
+                                    setVestingCyclePercent,
+                                    false,
+                                    3,
+                                    0,
+                                    100
+                                  )
+                                }
+                                disabled={isActionLoading}
+                                className="text-foreground pr-8"
+                              />
+                              <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-muted-foreground">
+                                %
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              Percentage released per cycle.
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
                     )}
-                  </Button>
-                ) : factoryFeeTokenAddress !== zeroAddress &&
-                  factoryCreationFee > 0n &&
-                  !hasSufficientFeeTokenAllowance ? (
-                  <Button
-                    onClick={handleApproveFeeToken}
-                    disabled={
-                      isLoadingFactoryCreationFee ||
-                      isLoadingFactoryFeeToken ||
-                      isApprovingFeeToken ||
-                      isConfirmingFeeTokenApproval
-                    }
-                    className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white text-lg py-6 hover:from-primary-800 hover:to-primary-700"
-                  >
-                    {isApprovingFeeToken || isConfirmingFeeTokenApproval ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
-                        Approving Fee Token ({factoryFeeTokenSymbol})...
-                      </>
-                    ) : (
-                      `Approve ${
-                        factoryFeeTokenSymbol || "Fee Token"
-                      } for Creation Fee`
-                    )}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleCreatePresale}
-                    disabled={
-                      isLoadingDepositCalc ||
-                      isWritePending ||
-                      isConfirming ||
-                      isLoadingFactoryCreationFee ||
-                      isLoadingFactoryFeeToken ||
-                      (factoryFeeTokenAddress !== zeroAddress &&
-                        factoryCreationFee > 0n &&
-                        (isApprovingFeeToken || isConfirmingFeeTokenApproval))
-                    }
-                    className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white text-lg py-6 hover:from-primary-800 hover:to-primary-700"
-                  >
-                    {isWritePending || isConfirming ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
-                        Creating Presale...
-                      </>
-                    ) : (
-                      "Create Presale"
-                    )}
-                  </Button>
-                )
-              ) : (
-                <Button
-                  disabled={true}
-                  className="w-full text-lg py-6 bg-muted text-muted-foreground cursor-not-allowed"
-                  title={
-                    configError ||
-                    "Connect wallet and fill required fields to enable actions."
-                  }
-                >
-                  {isLoadingFactoryCreationFee ||
-                  isLoadingFactoryFeeToken ||
-                  isLoadingDepositCalc ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading
-                      prerequisites...
-                    </>
-                  ) : (
-                    "Create Presale"
+                  </Card>
+                </section>
+
+                {/* Leftover Token Handling */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Unsold Tokens
+                    </h3>
+                  </div>
+                  <div className="space-y-3 animate-slide-up">
+                    <Label
+                      htmlFor="leftoverTokenOption"
+                      className="text-base font-medium flex items-center"
+                    >
+                      Handling Unsold Tokens{" "}
+                      <span className="text-destructive ml-1">*</span>
+                    </Label>
+                    <Select
+                      value={leftoverTokenOption.toString()}
+                      onValueChange={(value) =>
+                        setLeftoverTokenOption(parseInt(value))
+                      }
+                      disabled={isActionLoading}
+                    >
+                      <SelectTrigger
+                        id="leftoverTokenOption"
+                        className="text-foreground border-input"
+                      >
+                        <SelectValue placeholder="Select option..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-input text-popover-foreground">
+                        <SelectItem value="0">Burn Unsold Tokens</SelectItem>
+                        <SelectItem value="1">Refund to Creator</SelectItem>
+                        <SelectItem value="2">Add to Liquidity</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      Choose what happens to tokens not sold during the presale.
+                    </p>
+                  </div>
+                </section>
+              </div>
+            )}
+
+            {/* Stage 3: Security & Review */}
+            {currentStage === 3 && (
+              <div className="space-y-8 animate-fade-in">
+                {/* Whitelist Configuration */}
+                <section className="space-y-6">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Whitelist Configuration
+                    </h3>
+                  </div>
+                  <div className="space-y-3 animate-slide-up">
+                    <Label
+                      htmlFor="whitelistType"
+                      className="text-base font-medium flex items-center"
+                    >
+                      Whitelist Type
+                    </Label>
+                    <Select
+                      value={whitelistType.toString()}
+                      onValueChange={(value) =>
+                        setWhitelistType(parseInt(value))
+                      }
+                      disabled={isActionLoading}
+                    >
+                      <SelectTrigger
+                        id="whitelistType"
+                        className="text-foreground border-input"
+                      >
+                        <SelectValue placeholder="Select whitelist type..." />
+                      </SelectTrigger>
+                      <SelectContent className="bg-popover border-input text-popover-foreground">
+                        <SelectItem value="0">None (Public)</SelectItem>
+                        <SelectItem value="1" disabled>
+                          Merkle Proof (Coming Soon)
+                        </SelectItem>
+                        <SelectItem value="2">NFT Holder</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      Restrict participation based on criteria.
+                    </p>
+                  </div>
+
+                  {whitelistType === 2 && (
+                    <div className="space-y-3 animate-slide-up">
+                      <Label
+                        htmlFor="nftContractAddress"
+                        className="text-base font-medium flex items-center"
+                      >
+                        NFT Contract Address{" "}
+                        <span className="text-destructive ml-1">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="nftContractAddress"
+                          placeholder="0x..."
+                          value={nftContractAddress}
+                          onChange={(e) => {
+                            let val = e.target.value.replace(/\s+/g, "");
+                            let pfx = "";
+                            if (val.toLowerCase().startsWith("0x")) {
+                              pfx = val.substring(0, 2);
+                              val = val.substring(2);
+                            }
+                            val = val.replace(/[^0-9a-fA-F]/gi, "").substring(0, 40);
+                            setNftContractAddress((pfx + val) as Address);
+                          }}
+                          disabled={isActionLoading}
+                          className="text-foreground pr-10 font-mono text-sm"
+                        />
+                        {nftContractAddress && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 text-muted-foreground hover:text-primary-900"
+                            onClick={() =>
+                              navigator.clipboard.writeText(nftContractAddress)
+                            }
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Enter the contract address of the required NFT collection.
+                      </p>
+                    </div>
                   )}
+                </section>
+
+                {/* Calculated Token Deposit Display */}
+                <section className="space-y-6 animate-slide-up">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Token Deposit
+                    </h3>
+                  </div>
+                  <div className="space-y-3">
+                    <Label className="text-base font-medium flex items-center">
+                      Required Token Deposit
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-popover border-input text-popover-foreground">
+                          <p className="max-w-xs">
+                            Total tokens required for the presale and liquidity pool
+                            based on your settings.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </Label>
+                    <div className="p-4 border border-input rounded-md bg-muted min-h-[48px] flex items-center">
+                      {isLoadingDepositCalc && (
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin text-primary-900" />
+                      )}
+                      {canCalculateDeposit &&
+                      !isLoadingDepositCalc &&
+                      typeof calculatedTokenDeposit === "bigint" &&
+                      tokenDecimals !== undefined ? (
+                        <span className="text-foreground font-medium">
+                          {formatUnits(calculatedTokenDeposit, tokenDecimals)}{" "}
+                          Tokens
+                        </span>
+                      ) : canCalculateDeposit && isLoadingDepositCalc ? (
+                        <span className="text-muted-foreground">
+                          Calculating...
+                        </span>
+                      ) : depositCalcError ? (
+                        <span className="text-destructive text-sm flex items-center">
+                          <AlertCircle className="mr-2 h-4 w-4" /> Error calculating
+                          deposit.
+                        </span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">
+                          Fill required fields to calculate.
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Total tokens needed for presale and liquidity.
+                    </p>
+                  </div>
+                </section>
+
+                {/* Fees & Summary */}
+                <section className="space-y-6 animate-slide-up">
+                  <div className="flex items-center justify-between border-b border-muted pb-2">
+                    <h3 className="text-lg font-medium text-foreground">
+                      Summary & Fees
+                    </h3>
+                  </div>
+                  <Card className="bg-muted/50 border shadow-sm">
+                    <CardContent className="space-y-4 pt-6">
+                      <div className="flex justify-between text-base">
+                        <span className="flex items-center">
+                          Creation Fee
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="bg-popover border-input text-popover-foreground">
+                              <p className="max-w-xs">
+                                Fee charged by the presale factory to create the
+                                presale.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </span>
+                        <span>
+                          {isLoadingFactoryCreationFee ||
+                          isLoadingFactoryFeeToken ||
+                          isLoadingFactoryFeeTokenDecimals ||
+                          isLoadingFactoryFeeTokenSymbol ? (
+                            <span className="flex items-center">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin text-primary-900" />{" "}
+                              Loading fee...
+                            </span>
+                          ) : factoryCreationFee !== undefined &&
+                            factoryFeeTokenDecimals !== undefined &&
+                            factoryFeeTokenSymbol ? (
+                            <span className="font-medium">
+                              {formatUnits(
+                                factoryCreationFee,
+                                factoryFeeTokenDecimals
+                              )}{" "}
+                              {factoryFeeTokenSymbol}
+                            </span>
+                          ) : (
+                            <span className="text-destructive flex items-center">
+                              <AlertCircle className="mr-2 h-4 w-4" /> Error loading
+                              fee
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      {createFeeCost !== undefined && (
+                        <div className="flex justify-between text-base">
+                          <span className="flex items-center">
+                            Estimated Gas Fee
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info className="h-4 w-4 ml-2 text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="bg-popover border-input text-popover-foreground">
+                                <p className="max-w-xs">
+                                  Estimated Ethereum network gas fee for deploying
+                                  the presale contract.
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </span>
+                          <span className="font-medium">
+                            <EstimatedFeeDisplay label="" fee={createFeeCost} />
+                          </span>
+                        </div>
+                      )}
+                      {actionError && (
+                        <Alert
+                          variant="destructive"
+                          className="mt-4 bg-destructive/10 border-destructive/20 text-destructive"
+                        >
+                          <AlertCircle className="h-5 w-5" />
+                          <AlertTitle className="text-base font-heading">
+                            Error
+                          </AlertTitle>
+                          <AlertDescription className="text-sm">
+                            {actionError}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </CardContent>
+                  </Card>
+                </section>
+
+                {/* Action Buttons */}
+                <section className="space-y-6 animate-slide-up">
+                  {isConnected &&
+                  tokenAddress &&
+                  isAddress(tokenAddress) &&
+                  factoryAddress &&
+                  typeof calculatedTokenDeposit === "bigint" &&
+                  calculatedTokenDeposit > 0n &&
+                  factoryCreationFee !== undefined &&
+                  factoryFeeTokenAddress !== undefined &&
+                  !configError ? (
+                    !hasSufficientAllowance ? (
+                      <Button
+                        onClick={handleApprove}
+                        disabled={
+                          isLoadingDepositCalc ||
+                          isApproving ||
+                          isConfirmingApproval ||
+                          isLoadingFactoryCreationFee ||
+                          isLoadingFactoryFeeToken ||
+                          isActionLoading
+                        }
+                        className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-lg py-6 hover:from-yellow-600 hover:to-orange-600"
+                      >
+                        {isApproving || isConfirmingApproval ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
+                            Approving Presale Tokens...
+                          </>
+                        ) : (
+                          "Approve Presale Tokens"
+                        )}
+                      </Button>
+                    ) : factoryFeeTokenAddress !== zeroAddress &&
+                      factoryCreationFee > 0n &&
+                      !hasSufficientFeeTokenAllowance ? (
+                      <Button
+                        onClick={handleApproveFeeToken}
+                        disabled={
+                          isLoadingFactoryCreationFee ||
+                          isLoadingFactoryFeeToken ||
+                          isApprovingFeeToken ||
+                          isConfirmingFeeTokenApproval ||
+                          isActionLoading
+                        }
+                        className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 text-white text-lg py-6 hover:from-yellow-600 hover:to-orange-600"
+                      >
+                        {isApprovingFeeToken || isConfirmingFeeTokenApproval ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
+                            Approving Fee Token ({factoryFeeTokenSymbol})...
+                          </>
+                        ) : (
+                          `Approve ${
+                            factoryFeeTokenSymbol || "Fee Token"
+                          } for Creation Fee`
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={handleCreatePresale}
+                        disabled={
+                          isLoadingDepositCalc ||
+                          isWritePending ||
+                          isConfirming ||
+                          isLoadingFactoryCreationFee ||
+                          isLoadingFactoryFeeToken ||
+                          isActionLoading
+                        }
+                        className="w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white text-lg py-6 hover:from-green-600 hover:to-emerald-700"
+                      >
+                        {isWritePending || isConfirming ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />{" "}
+                            Creating Presale...
+                          </>
+                        ) : (
+                          "Create Presale"
+                        )}
+                      </Button>
+                    )
+                  ) : (
+                    <Button
+                      disabled={true}
+                      className="w-full text-lg py-6 bg-muted text-muted-foreground cursor-not-allowed"
+                      title={
+                        configError ||
+                        "Connect wallet and fill required fields to enable actions."
+                      }
+                    >
+                      {isLoadingFactoryCreationFee ||
+                      isLoadingFactoryFeeToken ||
+                      isLoadingDepositCalc ? (
+                        <>
+                          <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading
+                          prerequisites...
+                        </>
+                      ) : (
+                        "Create Presale"
+                      )}
+                    </Button>
+                  )}
+                </section>
+              </div>
+            )}
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between mt-12 border-t pt-6">
+              <Button
+                variant="outline"
+                onClick={handlePreviousStage}
+                disabled={currentStage === 1 || isActionLoading}
+                className="text-lg py-6 px-8"
+              >
+                <ArrowLeft className="mr-2 h-5 w-5" />
+                Back
+              </Button>
+              {currentStage < 3 ? (
+                <Button
+                  onClick={handleNextStage}
+                  disabled={isActionLoading}
+                  className="text-lg py-6 px-8 bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
+                >
+                  Next
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
+              ) : (
+                // Render the final action buttons directly here or keep them in Stage 3 section
+                // For clarity, keeping the final action buttons within Stage 3 section above
+                // This button is effectively replaced by the Approve/Create buttons in Stage 3
+                <div className="w-[136px]"></div> // Placeholder to maintain layout
               )}
-            </section>
+            </div>
           </CardContent>
         </Card>
       </div>
