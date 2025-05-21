@@ -17,7 +17,8 @@ import PresaleJson from "@/abis/Presale.json";
 import { getPresaleStatus, cn, type PresaleStatusReturn } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { UserProfileFarcasterSection } from "@/components/UserProfileFarcasterSection";
+
+import { FarcasterProfileSDKDisplay } from "@/components/FarcasterProfileSDKDisplay";
 
 
 const factoryAbi = PresaleFactoryJson.abi as Abi;
@@ -753,7 +754,8 @@ const UserProfilePage = () => {
 
             {/* Add the Farcaster Profile Section right here */}
 <div className="mb-6">
-    <UserProfileFarcasterSection userAddress={mainAddress} />
+   <FarcasterProfileSDKDisplay address={mainAddress} size="lg" showBadge={true} />
+
 </div>
 
             <Tabs defaultValue="created">
