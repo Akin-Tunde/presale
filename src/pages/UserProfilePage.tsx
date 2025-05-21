@@ -1,6 +1,6 @@
-import { useAccount, useEnsName, useReadContracts, useReadContract, useWriteContract, useWaitForTransactionReceipt, useEstimateGas, useFeeData } from "wagmi";
+import { useAccount, useReadContracts, useReadContract, useWriteContract, useWaitForTransactionReceipt, useEstimateGas, useFeeData } from "wagmi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,10 +38,7 @@ const shortenAddress = (address: string | undefined | null): string => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
 };
 
-const getEnsAvatar = (ensName: string | null | undefined): string | undefined => {
-    if (!ensName) return undefined;
-    return `https://metadata.ens.domains/mainnet/avatar/${ensName}`;
-};
+
 
 const EstimatedFeeDisplay = ({
   fee,
@@ -187,24 +184,6 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
 
     const canFinalize = isOwner && presaleDataAvailable && state === 1 && endTime !== undefined && nowSeconds > endTime && totalContributed !== undefined && softCap !== undefined && totalContributed >= softCap;
 
-    console.log("Debug canFinalize:", {
-  isOwner,
-  presaleDataAvailable,
-  state,
-  endTime,
-  nowSeconds,
-  totalContributed,
-  softCap,
-  condition1: isOwner,
-  condition2: presaleDataAvailable,
-  condition3: state === 1,
-  condition4: endTime !== undefined,
-
-  condition6: totalContributed !== undefined,
-  condition7: softCap !== undefined,
-  
-  canFinalize
-});
 
 
     const canCancel = isOwner && presaleDataAvailable && (state === 0 || (state === 1 && totalContributed !== undefined && softCap !== undefined && totalContributed < softCap));
@@ -657,9 +636,7 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
 
 const UserProfilePage = () => {
     const { address, isConnected } = useAccount();
-    const { data: ensName } = useEnsName({ address });
-    const avatarUrl = getEnsAvatar(ensName || undefined);
-
+  
     const { data: allPresalesFromFactory, isLoading: isLoadingAllPresales, refetch: refetchAllPresalesFromFactory, error: errorAllPresales } = useReadContract({
         abi: factoryAbi,
         address: factoryAddress,
@@ -725,7 +702,7 @@ const UserProfilePage = () => {
     }
 
     const isLoading = isLoadingAllPresales || isLoadingCreated || isLoadingContributedAddresses;
-    const mainEnsName = ensName || undefined;
+
     const mainAddress = address || undefined;
 
     return (
@@ -738,19 +715,6 @@ const UserProfilePage = () => {
                     </Button>
                 </Link>
             </div>
-
-            <Card className="mb-6">
-                <CardHeader className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 sm:p-6">
-                    <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
-                        <AvatarImage src={avatarUrl} alt={ensureString(mainEnsName || mainAddress, "User")} />
-                        <AvatarFallback className="text-2xl sm:text-3xl">{ensureString(mainEnsName ? mainEnsName.substring(0, 2) : mainAddress ? mainAddress.substring(2, 4) : "U")}</AvatarFallback>
-                    </Avatar>
-                    <div className="text-center sm:text-left">
-                        <CardTitle className="text-lg sm:text-xl break-all">{ensureString(mainEnsName || shortenAddress(mainAddress))}</CardTitle>
-                        <CardDescription className="text-xs font-mono break-all mt-1">{ensureString(mainAddress)}</CardDescription>
-                    </div>
-                </CardHeader>
-            </Card>
 
             {/* Add the Farcaster Profile Section right here */}
 <div className="mb-6">
