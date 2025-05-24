@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import PresaleJson from "@/abis/Presale.json";
 import { type Abi, erc20Abi } from "viem";
@@ -15,8 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { getPresaleStatus } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useState } from "react";
-import { Calendar, Clock, TrendingUp, Share2 } from "lucide-react"; // Added Share2 icon
+import { Calendar, Clock, TrendingUp, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { getPresaleImage } from "@/lib/supabase";
 
 const presaleAbi = PresaleJson.abi as Abi;
 
@@ -84,7 +85,35 @@ const formatCurrency = (value: string) => {
 };
 
 const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
-  const [logoError, setLogoError] = useState(false);
+  // State for image loading and errors
+  const [presaleImageUrl, setPresaleImageUrl] = useState<string | null>(null);
+  const [customImageError, setCustomImageError] = useState(false);
+  const [trustWalletImageError, setTrustWalletImageError] = useState(false);
+
+  
+// Fetch the custom presale image from Supabase
+useEffect(() => {
+  const fetchPresaleImage = async () => {
+    if (presaleAddress) {
+      try {
+        const imageUrl = await getPresaleImage(presaleAddress);
+        if (imageUrl) {
+          setPresaleImageUrl(imageUrl);
+          setCustomImageError(false); // Reset error state when we get a new URL
+        }
+      } catch (error: unknown) { // Add the unknown type annotation here
+        console.error("Error fetching presale image:", error);
+      
+        if (error instanceof Error && error.message === "Invalid API key") {
+          console.warn("Supabase API key issue - check your environment variables");
+        }
+      }
+    }
+  };
+  
+  fetchPresaleImage();
+}, [presaleAddress]);
+
 
   const presaleContract = {
     address: presaleAddress,
@@ -231,20 +260,34 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
     <Card className="border-2 border-[#13494220] rounded-xl overflow-hidden shadow-sm hover:shadow-lg hover:border-[#134942] transition-all duration-300 h-full flex flex-col">
       <CardHeader className="flex flex-row items-start gap-3 bg-[#13494208] pb-4 group-hover:bg-[#13494210] transition-colors duration-300">
         <Avatar className="h-12 w-12 border-2 border-[#13494220] shadow-sm">
-          {/* Display logo if URL exists and no error occurred, otherwise fallback */}
-          <AvatarImage
-            src={logoUrl}
-            alt={`${tokenSymbol || "Token"} logo`}
-            onError={() => setLogoError(true)}
-            className={logoError ? "hidden" : "block"}
-          />
-          <AvatarFallback
-            className={`${
-              !logoUrl || logoError ? "block" : "hidden"
-            } bg-[#13494215] text-[#134942] font-bold text-xl`}
-          >
-            {getInitials(tokenSymbol)}
-          </AvatarFallback>
+          {/* First try to use the custom uploaded image */}
+          {presaleImageUrl && !customImageError && (
+            <AvatarImage
+              src={presaleImageUrl}
+              alt={`${tokenSymbol || "Token"} logo`}
+              onError={() => setCustomImageError(true)}
+              className="block"
+            />
+          )}
+          
+          {/* If no custom image or it failed, try the Trust Wallet logo */}
+          {(!presaleImageUrl || customImageError) && logoUrl && !trustWalletImageError && (
+            <AvatarImage
+              src={logoUrl}
+              alt={`${tokenSymbol || "Token"} logo`}
+              onError={() => setTrustWalletImageError(true)}
+              className="block"
+            />
+          )}
+          
+          {/* Fallback to initials if both images fail */}
+          {((!presaleImageUrl || customImageError) && (!logoUrl || trustWalletImageError)) && (
+            <AvatarFallback
+              className="bg-[#13494215] text-[#134942] font-bold text-xl"
+            >
+              {getInitials(tokenSymbol)}
+            </AvatarFallback>
+          )}
         </Avatar>
         <div className="flex-1 space-y-1">
           <CardTitle className="text-lg font-bold text-[#134942] leading-tight group-hover:translate-x-0.5 transition-transform duration-300">

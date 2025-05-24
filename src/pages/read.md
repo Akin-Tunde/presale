@@ -8,7 +8,7 @@ import {
   useReadContract,
   usePublicClient,
 } from "wagmi";
-import { getEventSelector,  decodeEventLog } from 'viem';
+
 import {
   parseUnits,
   zeroAddress,
@@ -897,17 +897,19 @@ useEffect(() => {
     }
   };
 
-
-// The full handleCreatePresale function
 const handleCreatePresale = async () => {
-  // Final validation before creating
+  
   if (!validateAllStages(true)) {
+    console.warn("[handleCreatePresale] validateAllStages failed."); // DEBUG
     // validateAllStages will show toast on error
     return;
   }
+  console.log("[handleCreatePresale] Final validation passed."); // DEBUG
 
   // Additional address validation to prevent runtime errors
+  console.log("[handleCreatePresale] Validating token address:", tokenAddress); // DEBUG
   if (!tokenAddress || !isAddress(tokenAddress)) {
+    console.error("[handleCreatePresale] Invalid Token Address."); // DEBUG
     toast.error("Invalid Token Address", {
       description: "Please enter a valid token address before creating the presale."
     });
@@ -915,39 +917,52 @@ const handleCreatePresale = async () => {
     return;
   }
 
+  console.log("[handleCreatePresale] Validating NFT contract address (if applicable):", { whitelistType, nftContractAddress }); // DEBUG
   if (whitelistType === 2 && (!nftContractAddress || !isAddress(nftContractAddress))) {
+    console.error("[handleCreatePresale] Invalid NFT Contract Address."); // DEBUG
     toast.error("Invalid NFT Contract Address", {
       description: "Please enter a valid NFT contract address for whitelist."
     });
     setCurrentStage(3); // Return to whitelist stage
     return;
   }
+  console.log("[handleCreatePresale] Address validations passed."); // DEBUG
 
   setActionError("");
   try {
+    console.log("[handleCreatePresale] Entering try block."); // DEBUG
     // Check if publicClient is available
+    console.log("[handleCreatePresale] Checking publicClient..."); // DEBUG
     if (!publicClient) {
+      console.error("[handleCreatePresale] Public client is not available."); // DEBUG
       throw new Error("Public client is not available");
     }
+    console.log("[handleCreatePresale] Public client available."); // DEBUG
     
     const ethToSend =
       factoryFeeTokenAddress === zeroAddress &&
       typeof factoryCreationFee === "bigint"
         ? factoryCreationFee
         : 0n;
+    console.log("[handleCreatePresale] Calculated ethToSend:", ethToSend.toString()); // DEBUG
 
     // Ensure all addresses are valid before proceeding
+    console.log("[handleCreatePresale] Validating configuration addresses:", { factoryAddress, wethAddress, uniswapRouterAddress }); // DEBUG
     if (!factoryAddress || !isAddress(factoryAddress)) {
+      console.error("[handleCreatePresale] Invalid factory address configuration."); // DEBUG
       throw new Error("Invalid factory address configuration");
     }
     
     if (!wethAddress || !isAddress(wethAddress)) {
+      console.error("[handleCreatePresale] Invalid WETH address configuration."); // DEBUG
       throw new Error("Invalid WETH address configuration");
     }
     
     if (!uniswapRouterAddress || !isAddress(uniswapRouterAddress)) {
+      console.error("[handleCreatePresale] Invalid Uniswap Router address configuration."); // DEBUG
       throw new Error("Invalid Uniswap Router address configuration");
     }
+    console.log("[handleCreatePresale] Configuration addresses validated."); // DEBUG
 
     // Prepare the presale options
     const presaleOptionsArgs = {
@@ -963,25 +978,19 @@ const handleCreatePresale = async () => {
       start: calculatedStartTime,
       end: calculatedEndTime,
       lockupDuration: BigInt(parseInt(liquidityLockDays) * 86400), // days to seconds
-      vestingPercentage: useVesting ? BigInt(parseInt(vestingTgePercent) * 100) : 0n, // Set to 0 if not using vesting
+      vestingPercentage: useVesting ? BigInt(parseInt(vestingTgePercent) * 100) : 10000n, // 100% if not using vesting
       vestingDuration: useVesting ? BigInt(parseInt(vestingCycleDays) * 86400) : 0n, // days to seconds
       leftoverTokenOption: BigInt(leftoverTokenOption),
       currency: currencyAddress,
-      whitelistType: whitelistType,
-      merkleRoot: "0x0000000000000000000000000000000000000000000000000000000000000000",
+      whitelistType: BigInt(whitelistType), // Ensure this is converted to BigInt
+      merkleRoot: "0x0000000000000000000000000000000000000000000000000000000000000000", // Placeholder
       nftContractAddress: whitelistType === 2 && nftContractAddress ? nftContractAddress : zeroAddress,
     };
-
-    // *** ADD DEBUG LOGGING HERE ***
-    console.log("DEBUG: Calling createPresale with:", {
-      options: presaleOptionsArgs,
-      token: tokenAddress,
-      weth: wethAddress,
-      router: uniswapRouterAddress,
-      value: ethToSend.toString(), // Log value as string for readability
-    });
+    // Use JSON.stringify with BigInt replacer for better logging of args
+    console.log("[handleCreatePresale] Prepared presaleOptionsArgs:", JSON.stringify(presaleOptionsArgs, (key, value) => typeof value === 'bigint' ? value.toString() : value)); // DEBUG
 
     // Send the transaction
+    console.log("[handleCreatePresale] Sending createPresale transaction..."); // DEBUG
     const txHash = await writeContractAsync({
       address: factoryAddress,
       abi: factoryAbi,
@@ -994,151 +1003,80 @@ const handleCreatePresale = async () => {
       ],
       value: ethToSend,
     });
+    console.log("[handleCreatePresale] Transaction sent. Hash:", txHash); // DEBUG
     
     toast.info("Create Presale Transaction Sent", {
       description: "Waiting for confirmation...",
     });
     
     // Wait for transaction confirmation using publicClient
+    // Note: The useEffect hook also waits for confirmation. Consider consolidating this logic.
+    console.log("[handleCreatePresale] Waiting for transaction receipt for hash:", txHash); // DEBUG
     const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
-
-    // *** ADD THIS CHECK ***
-    if (receipt.status === 'success') {
-      // Transaction SUCCEEDED
-      toast.success("Transaction Confirmed Successfully!");
-
-      // Extract presale address from logs
-      let presaleAddress = null;
-      if (receipt.logs) { // Check if logs exist (should for success)
-        presaleAddress = extractPresaleAddressFromLogs(receipt.logs);
-      }
-
-      // If we have a presale address, upload the image and navigate
-      if (presaleAddress) {
-        // Upload image if available
-        if (presaleImage) {
-          setIsUploadingImage(true);
-          try {
-            await uploadPresaleImage(presaleImage, presaleAddress);
-            toast.success("Image uploaded successfully");
-          } catch (error) {
-            console.error("Error uploading image:", error);
-            toast.error("Failed to upload image", {
-              description: error instanceof Error ? error.message : "Unknown error"
-            });
-          } finally {
-            setIsUploadingImage(false);
-          }
-        }
-        toast.success("Presale created and configured!");
-        navigate(`/presale/${presaleAddress}`);
-      } else {
-        // This case might indicate an issue with log extraction even on success
-        console.error("Transaction succeeded but failed to extract presale address from logs.", receipt);
-        toast.error("Presale Created, But Address Extraction Failed", {
-          description: "Please check the transaction on a block explorer."
-        });
-        // Navigate to a general page as a fallback
-        navigate('/presales');
+    console.log("[handleCreatePresale] Transaction receipt received:", receipt); // DEBUG
+    
+    // Extract presale address from logs
+    let presaleAddress = null;
+    console.log("[handleCreatePresale] Attempting to extract presale address from logs..."); // DEBUG
+    // Extract from logs using the correct function
+    if (receipt && receipt.logs) {
+      // Assuming extractPresaleAddressFromLogs exists and works correctly
+      // Need to ensure this helper function is robust
+      try { // Add try/catch around extraction
+         presaleAddress = extractPresaleAddressFromLogs(receipt.logs);
+         console.log("[handleCreatePresale] Extracted presale address:", presaleAddress); // DEBUG
+      } catch (logError) {
+         console.error("[handleCreatePresale] Error extracting presale address from logs:", logError); // DEBUG
+         presaleAddress = null; // Ensure it's null if extraction fails
       }
     } else {
-      // *** HANDLE TRANSACTION FAILURE ***
-      // Transaction FAILED (reverted)
-      console.error("Transaction failed (reverted). Receipt:", receipt);
-      setActionError("Transaction failed on the blockchain. It may have been reverted.");
-      toast.error("Presale Creation Failed", {
-        description: "The transaction was reverted on the blockchain. Please check your parameters (e.g., start time) and try again."
-      });
-      // Do not attempt log extraction or navigation
+       console.warn("[handleCreatePresale] Receipt or logs missing, cannot extract address."); // DEBUG
     }
-    
+
+    if (presaleAddress) {
+      console.log("[handleCreatePresale] Presale created successfully. Address:", presaleAddress); // DEBUG
+      toast.success("Presale Created Successfully!", {
+        description: `Presale Address: ${presaleAddress}`,
+      });
+      // Navigation is handled in the useEffect hook based on isConfirmed and hash
+      // Consider if explicit navigation is needed here as a fallback
+    } else {
+      console.error("[handleCreatePresale] Failed to extract presale address from logs."); // DEBUG
+      throw new Error("Could not extract presale address from transaction logs.");
+    }
+
   } catch (error: any) {
-    console.error("Create presale error:", error);
+    console.error("[handleCreatePresale] Error caught in main try block:", error); // DEBUG
     const displayError =
       error?.shortMessage ||
       error?.message ||
       "An unknown error occurred during presale creation.";
     setActionError(`Presale creation failed: ${displayError}`);
     toast.error("Presale Creation Failed", { description: displayError });
+  } finally { // Add finally block for exit log
+     console.log("[handleCreatePresale] Function finished."); // DEBUG
   }
-};
-
-
- // Ensure this import is added/present at the top
-
-// ... (keep existing imports and code before the function)
-
-// Pre-calculate or define the event signature hash outside the component if possible,
-// or inside if factoryAbi is only available there.
-// Note: This assumes factoryAbi is available in this scope.
-let presaleCreatedEventSignature: string | undefined;
-try {
-  // Use the known signature string directly for simplicity and robustness
-  presaleCreatedEventSignature = getEventSelector("PresaleCreated(address,address,address,uint256,uint256)");
-  console.log("Using PresaleCreated event signature:", presaleCreatedEventSignature);
-} catch (e) {
-   console.error("Error generating event selector:", e);
 }
 
-
-// Robust function to extract presale address from logs
-const extractPresaleAddressFromLogs = (logs: ReadonlyArray<any>): string | null => { // Use ReadonlyArray if applicable from wagmi/viem types
-  if (!presaleCreatedEventSignature) {
-     console.error("PresaleCreated event signature hash is not available.");
-     return null;
-  }
-  if (!factoryAddress) {
-     console.error("Factory address is not available for log filtering.");
-     return null;
-  }
-
-  console.log(`Searching for event signature: ${presaleCreatedEventSignature} from factory: ${factoryAddress} in ${logs.length} logs`);
-
+// Make sure to also include the extractPresaleAddressFromLogs function:
+const extractPresaleAddressFromLogs = (logs: any[]): string | null => {
   for (const log of logs) {
-    // Check 1: Does the log come from our factory?
-    if (log.address?.toLowerCase() !== factoryAddress?.toLowerCase()) {
-      continue; // Skip logs from other contracts
-    }
-
-    // Check 2: Does the event signature match PresaleCreated?
-    if (log.topics && log.topics[0] === presaleCreatedEventSignature) {
-       console.log("Found potential PresaleCreated event log:", log);
-      try {
-        // Decode the log using the ABI to easily access parameters
-        const decodedLog = decodeEventLog({
-          abi: factoryAbi, // Ensure factoryAbi is accessible here
-          data: log.data,
-          topics: log.topics as any, // Cast topics if needed based on viem version
-        });
-
-        // Access the presaleContract address by name (more robust)
-        if (decodedLog.eventName === 'PresaleCreated' && decodedLog.args && typeof decodedLog.args === 'object' && 'presaleContract' in decodedLog.args) {
-           const presaleAddress = decodedLog.args.presaleContract as Address; // Type assertion
-           if (isAddress(presaleAddress)) {
-             console.log('Successfully extracted presale address via decoding:', presaleAddress);
-             return presaleAddress;
-           } else {
-              console.warn('Decoded presaleContract address is invalid:', presaleAddress);
-           }
-        } else {
-           console.warn('Decoded log did not match expected eventName or args structure. Decoded:', decodedLog);
-        }
-      } catch (error) {
-        console.error('Error decoding PresaleCreated event log:', error);
-        // Fallback to topic index if decoding fails (less ideal but better than nothing)
-        if (log.topics.length > 2) { // Need at least signature + creator + presaleContract topics
-           const potentialAddress = `0x${log.topics[2].slice(-40)}`;
-           if (isAddress(potentialAddress)) {
-             console.warn('Extracted presale address using topic index as fallback:', potentialAddress);
-             return potentialAddress;
-           } else {
-              console.warn('Fallback topic index extraction resulted in invalid address:', potentialAddress);
-           }
+    try {
+      // Check if this log is from the factory contract
+      if (log.address.toLowerCase() === factoryAddress?.toLowerCase()) {
+        // Check if we have enough topics and extract the presale address
+        if (log.topics.length >= 3) {
+          // The presale address is the second indexed parameter (topics[2])
+          const presaleAddressHex = `0x${log.topics[2].slice(-40)}`;
+          if (isAddress(presaleAddressHex)) {
+            return presaleAddressHex;
+          }
         }
       }
+    } catch (error) {
+      console.error("Error parsing log for presale address:", error);
     }
   }
-  console.error('Could not find PresaleCreated event log or extract address from provided logs.');
   return null;
 };
 
