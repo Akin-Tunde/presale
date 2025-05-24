@@ -1,19 +1,16 @@
 import { http, createConfig } from 'wagmi';
-import { base, mainnet } from 'wagmi/chains'; // Added mainnet
-import { injected } from 'wagmi/connectors';
-
-// const projectId = 'YOUR_WALLETCONNECT_PROJECT_ID'; // Replace with your actual WalletConnect Project ID
+import { base, sepolia} from 'wagmi/chains'; // Added mainnet
+import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
+ 
 
 export const config = createConfig({
-  chains: [base, mainnet], // Added mainnet
+  chains: [base, sepolia], // Added mainnet
   connectors: [
-    injected(),
-    // walletConnect({ projectId }),
-    // Add other connectors like Coinbase Wallet if needed
+  farcasterFrame()
   ],
   transports: {
     [base.id]: http(import.meta.env.VITE_BASE_MAINNET_RPC_URL || 'https://mainnet.base.org'),
-    [mainnet.id]: http(import.meta.env.VITE_MAINNET_RPC_URL || 'https://cloudflare-eth.com'), // Added mainnet transport
+    [sepolia.id]: http(import.meta.env.VITE_SEPOLIA_RPC_URL || 'https://sepolia.base.org'),
   },
   multiInjectedProviderDiscovery: true, // Enable EIP-6963
   ssr: false, // Set to true if using SSR/SSG

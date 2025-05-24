@@ -1,35 +1,34 @@
-import { useAccount, useEnsName, useReadContracts, useReadContract, useWriteContract, useWaitForTransactionReceipt, useEstimateGas, useFeeData } from "wagmi";
+import { useAccount, useReadContracts, useReadContract, useWriteContract, useWaitForTransactionReceipt, useEstimateGas, useFeeData } from "wagmi";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { AlertCircle, Info, RefreshCw, ArrowLeft } from "lucide-react";
+import { AlertCircle, Info, RefreshCw, ArrowLeft, Fuel } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
-import { type Abi, encodeFunctionData, type Address, formatUnits, isHex } from "viem"; 
+import { type Abi, encodeFunctionData, type Address, formatUnits, isHex, zeroAddress, formatEther, erc20Abi } from "viem"; 
 import PresaleFactoryJson from "@/abis/PresaleFactory.json";
 import PresaleJson from "@/abis/Presale.json";
-import ERC20Json from "@/abis/ERC20.json"; 
 import { getPresaleStatus, cn, type PresaleStatusReturn } from "@/lib/utils";
 import { toast } from "sonner";
-import { EstimatedFeeDisplay } from "@/pages/PresaleDetailPage";
 import { Badge } from "@/components/ui/badge";
+
+import { FarcasterProfileSDKDisplay } from "@/components/FarcasterProfileSDKDisplay";
+
 
 const factoryAbi = PresaleFactoryJson.abi as Abi;
 const presaleAbi = PresaleJson.abi as Abi;
-const erc20Abi = ERC20Json as Abi;
 const factoryAddress = import.meta.env.VITE_PRESALE_FACTORY_ADDRESS as Address;
 
-// Helper to ensure a value is a string or a fallback for rendering
 const ensureString = (value: any, fallback: string = "N/A"): string => {
     if (typeof value === "string") return value;
     if (typeof value === "number" || typeof value === "bigint") return String(value);
-    if (value && typeof value.message === "string") return value.message; // Handle error objects
+    if (value && typeof value.message === "string") return value.message; 
     if (value && typeof value.toString === "function" && value.toString() !== "[object Object]") return value.toString();
     return fallback;
 };
@@ -39,9 +38,40 @@ const shortenAddress = (address: string | undefined | null): string => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
 };
 
-const getEnsAvatar = (ensName: string | null | undefined): string | undefined => {
-    if (!ensName) return undefined;
-    return `https://metadata.ens.domains/mainnet/avatar/${ensName}`;
+
+
+const EstimatedFeeDisplay = ({
+  fee,
+  label,
+}: {
+  fee: bigint | undefined;
+  label?: string;
+}) => {
+  if (fee === undefined || fee === 0n) return null;
+  return (
+    <span className="text-xs text-muted-foreground ml-2 flex items-center">
+      {label && <span className="mr-1">{label}:</span>}
+      <Fuel className="h-3 w-3 mr-1" />~{formatEther(fee)} ETH
+    </span>
+  );
+};
+
+let currentPresaleOptionsForTimestampContext: any;
+
+const formatTimestamp = (timestamp: bigint | number | undefined, fieldName?: string): string => {
+    if (timestamp === undefined || timestamp === null) return "N/A";
+    try {
+        const numTimestamp = BigInt(timestamp);
+        if (numTimestamp === 0n) {
+            if (fieldName === "startTime" && (currentPresaleOptionsForTimestampContext?.state === 0 || currentPresaleOptionsForTimestampContext?.state === undefined)) return "Not Started Yet";
+            return "Not Set"; 
+        }
+        const date = new Date(Number(numTimestamp) * 1000);
+        if (isNaN(date.getTime())) return "Invalid Date";
+        return date.toLocaleString(); 
+    } catch (e) {
+        return "Invalid Timestamp";
+    }
 };
 
 interface CreatorPresaleCardProps {
@@ -68,8 +98,9 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
             { ...presaleContract, functionName: "state" },            
             { ...presaleContract, functionName: "paused" },           
             { ...presaleContract, functionName: "whitelistEnabled" }, 
-            { ...presaleContract, functionName: "getTotalContributed" }, // Corrected function name
-            { ...presaleContract, functionName: "owner" },            
+            { ...presaleContract, functionName: "getTotalContributed" },
+            { ...presaleContract, functionName: "owner" },
+            { ...presaleContract, functionName: "token" }, // Added to fetch the presale token address
         ],
     });
 
@@ -81,13 +112,46 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
     const stateCallResult = presaleDetailsResults?.[1];
     const pausedCallResult = presaleDetailsResults?.[2];
     const whitelistEnabledCallResult = presaleDetailsResults?.[3];
-    const totalContributedCallResult = presaleDetailsResults?.[4]; // Index remains 4
+    const totalContributedCallResult = presaleDetailsResults?.[4];
+    const tokenAddressCallResult = presaleDetailsResults?.[6]; // Index for token() call
 
-    const options = optionsResult?.status === "success" ? optionsResult.result : undefined;
+    const options = optionsResult?.status === "success" ? optionsResult.result as any[] : undefined;
+    currentPresaleOptionsForTimestampContext = { state: stateCallResult?.status === "success" ? stateCallResult.result : undefined };
+
     const state = stateCallResult?.status === "success" ? stateCallResult.result as number : undefined;
     const paused = pausedCallResult?.status === "success" ? pausedCallResult.result as boolean : undefined;
     const whitelistEnabled = whitelistEnabledCallResult?.status === "success" ? whitelistEnabledCallResult.result as boolean : undefined;
    
+    const presaleTokenAddress = tokenAddressCallResult?.status === "success" ? tokenAddressCallResult.result as Address : undefined;
+
+    const { data: fetchedPresaleTokenSymbol, isLoading: isLoadingPresaleTokenSymbol } = useReadContract({
+        address: presaleTokenAddress, // Use the address from token() call
+        abi: erc20Abi,
+        functionName: "symbol",
+        query: { enabled: !!presaleTokenAddress },
+    });
+    const presaleTokenSymbol = fetchedPresaleTokenSymbol as string | undefined;
+
+    const currencyAddressFromOptions = options?.[15] as Address | undefined;
+    const currencyIsEth = currencyAddressFromOptions === zeroAddress;
+
+    const { data: fetchedCurrencySymbol, isLoading: isLoadingCurrencySymbolCreator } = useReadContract({
+        address: currencyAddressFromOptions,
+        abi: erc20Abi,
+        functionName: "symbol",
+        query: { enabled: !!currencyAddressFromOptions && !currencyIsEth },
+    });
+
+    const { data: fetchedCurrencyDecimals, isLoading: isLoadingCurrencyDecimalsCreator } = useReadContract({
+        address: currencyAddressFromOptions,
+        abi: erc20Abi,
+        functionName: "decimals",
+        query: { enabled: !!currencyAddressFromOptions && !currencyIsEth },
+    });
+
+    const paymentDecimalsToUse = currencyIsEth ? 18 : (fetchedCurrencyDecimals as number | undefined);
+    const paymentSymbolToUse = currencyIsEth ? "ETH" : (fetchedCurrencySymbol as string | undefined) ?? (paymentDecimalsToUse !== undefined ? "Tokens" : "raw units");
+
     useEffect(() => {
         if (isConfirmed && receipt) {
             toast.success("Action Confirmed!", { description: `Tx: ${ensureString(receipt.transactionHash)}` });
@@ -103,61 +167,68 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
     let totalContributed: bigint | undefined = undefined;
     if (totalContributedCallResult?.status === "success") {
         if (totalContributedCallResult.result === null || (isHex(totalContributedCallResult.result) && totalContributedCallResult.result === "0x")) {
-            totalContributed = 0n; // Interpret 0x as 0 for totalContributed
+            totalContributed = 0n; 
         } else {
             totalContributed = totalContributedCallResult.result as bigint;
         }
     }
 
     const presaleDataAvailable = options !== undefined && state !== undefined && paused !== undefined && whitelistEnabled !== undefined && totalContributed !== undefined && fetchedOwner !== undefined;
-
     const presaleStatus: PresaleStatusReturn = (presaleDataAvailable && state !== undefined && options !== undefined) ? getPresaleStatus(state, options) : { text: "Loading...", variant: "default" };
-    const softCap = (options as any)?.softCap as bigint | undefined;
+    
+    const softCap = options?.[2] as bigint | undefined;
+    const startTime = options?.[9] as bigint | undefined;
+    const endTime = options?.[10] as bigint | undefined;
+
     const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
-    const endTime = (options as any)?.endTime as bigint | undefined;
 
     const canFinalize = isOwner && presaleDataAvailable && state === 1 && endTime !== undefined && nowSeconds > endTime && totalContributed !== undefined && softCap !== undefined && totalContributed >= softCap;
+
+
+
     const canCancel = isOwner && presaleDataAvailable && (state === 0 || (state === 1 && totalContributed !== undefined && softCap !== undefined && totalContributed < softCap));
+
     const canWithdraw = isOwner && presaleDataAvailable && (state === 2 || state === 3 || state === 4);
     const canPauseUnpause = isOwner && presaleDataAvailable && state === 1;
     const canToggleWhitelist = isOwner && presaleDataAvailable && state === 0;
     const canExtendClaim = isOwner && presaleDataAvailable && state === 2;
 
     const { data: finalizeGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "finalize", args: [] }), account: userAddress, query: { enabled: !!userAddress && canFinalize } });
+    
     const { data: cancelGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "cancel", args: [] }), account: userAddress, query: { enabled: !!userAddress && canCancel }});
+
     const { data: withdrawGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "withdraw", args: [] }), account: userAddress, query: { enabled: !!userAddress && canWithdraw }});
+
     const { data: pauseGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "pause", args: [] }), account: userAddress, query: { enabled: !!userAddress && canPauseUnpause && paused === false } });
+
     const { data: unpauseGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "unpause", args: [] }), account: userAddress, query: { enabled: !!userAddress && canPauseUnpause && paused === true } });
+
     const { data: toggleWhitelistGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "toggleWhitelist", args: [!(whitelistEnabled ?? false)] }), account: userAddress, query: { enabled: !!userAddress && canToggleWhitelist }});
+
     const { data: extendClaimGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "extendClaimDeadline", args: [BigInt(inputValue || "0")] }), account: userAddress, query: { enabled: !!userAddress && canExtendClaim && dialogOpen === "extendClaim" && !!inputValue && BigInt(inputValue) > 0 } });
 
+    const isLoadingAdditionalData = (!currencyIsEth && (isLoadingCurrencySymbolCreator || isLoadingCurrencyDecimalsCreator)) || isLoadingPresaleTokenSymbol;
 
-
-    if (isLoadingDetails) {
-        return <Card className="animate-pulse"><CardHeader><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full mt-1" /></CardHeader><CardContent><Skeleton className="h-8 w-full" /></CardContent></Card>;
+    if (isLoadingDetails || isLoadingAdditionalData) {
+        return <Card className="animate-pulse"><CardHeader><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full mt-1" /></CardHeader><CardContent><div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground mb-3 pt-2 border-t border-border"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /></div><Skeleton className="h-8 w-full" /></CardContent></Card>;
     }
 
     let errorMessagesToDisplay: string[] = [];
     if (detailsErrorHook) errorMessagesToDisplay.push(ensureString(detailsErrorHook, "Presale details hook error."));
     presaleDetailsResults?.forEach(result => {
         if (result?.status === "failure" && result.error) {
-            // Avoid double-counting the "returned no data" for totalContributed if already handled by its specific logic
             if (!(result === totalContributedCallResult && (result.error as any)?.message?.includes("returned no data"))) {
                  errorMessagesToDisplay.push(ensureString(result.error, "A contract call failed."));
             }
         }
     });
-    // If totalContributed specifically failed with "returned no data", but we interpreted it as 0n, don't add it to general errors unless it's the *only* issue.
     if (totalContributedCallResult?.status === "failure" && (totalContributedCallResult.error as any)?.message?.includes("returned no data") && totalContributed === undefined) {
-        // Only add if totalContributed is still undefined (meaning our 0n fallback didn't apply or wasn't enough)
         errorMessagesToDisplay.push(ensureString(totalContributedCallResult.error, "Failed to get total contributed."));
     }
 
     const combinedDisplayError = errorMessagesToDisplay.length > 0 ? errorMessagesToDisplay.join("; ") : "Unknown error loading presale data.";
 
     if (isDetailsError || presaleDetailsResults?.some(r => r.status === "failure" && !(r === totalContributedCallResult && (r.error as any)?.message?.includes("returned no data") && totalContributed !== undefined ))) {
-        // The condition now checks if totalContributed is NOT undefined when the specific error occurs, meaning we handled it as 0n.
-        // If totalContributed IS undefined despite the specific error, then it's a true error display case.
         return (
             <Card>
                 <CardHeader>
@@ -185,8 +256,6 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
     
     const calculateFee = (gas: bigint | undefined) => gas && feeData?.gasPrice ? gas * feeData.gasPrice : undefined;
 
-   
-
     const handleCreatorAction = async (functionName: string, args: any[] = [], actionName: string) => {
         if (!isOwner) {
             toast.error("Unauthorized", { description: "You are not the owner of this presale." });
@@ -201,10 +270,49 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
                 args: args,
             });
         } catch (err: any) {
-            const msg = ensureString(err, `${actionName} failed.`);
-            setActionError(msg);
-            toast.error(`${actionName} Failed`, { description: msg });
+            const originalErrorMessage = err.shortMessage || err.message;
+            const detailedErrorText = ensureString(originalErrorMessage, `An unknown error occurred during ${actionName}.`);
+
+            if (functionName === "finalize" &&
+                (
+                    (typeof originalErrorMessage === 'string' && (
+                        originalErrorMessage.includes("User denied transaction signature") ||
+                        originalErrorMessage.includes("User rejected the request")
+                    )) ||
+                    err.code === 4001 || // Standard EIP-1193 User Rejected Request
+                    (err.cause && typeof err.cause === 'object' && (err.cause as any).code === 4001) // Wrapped EIP-1193
+                )
+            ) {
+                toast.error("User cancel the finalize");
+                setActionError("User cancel the finalize");
+            } else if (functionName === "refund" &&
+                (
+                    (typeof originalErrorMessage === 'string' && (
+                        originalErrorMessage.includes("User denied transaction signature") ||
+                        originalErrorMessage.includes("User rejected the request")
+                    )) ||
+                    err.code === 4001 || // Standard EIP-1193 User Rejected Request
+                    (err.cause && typeof err.cause === 'object' && (err.cause as any).code === 4001) // Wrapped EIP-1193
+                )
+            ) {
+                toast.error("user reject refund");
+                setActionError("user reject refund");
+            } else {
+                toast.error(`${actionName} Failed`, { description: detailedErrorText });
+                setActionError(detailedErrorText);
+            }
+            console.error(`${actionName} error details:`, err); // Log the full error for debugging
         }
+    };
+
+    const formatCurrencyDisplay = (value: bigint | undefined, decimals: number | undefined, symbol: string): string => {
+        if (value === undefined) return "N/A";
+        if (decimals !== undefined) {
+            return `${formatUnits(value, decimals)} ${symbol}`;
+        }
+        if (symbol !== "ETH" && value === 0n) return `0 ${symbol}`;
+        if (symbol !== "ETH") return `${ensureString(value)} raw units (${symbol} details pending)`;
+        return `${ensureString(value)} raw units`;
     };
 
     return (
@@ -212,13 +320,33 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
             <CardHeader>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <CardTitle className="text-base font-medium">
-                        <Badge variant={presaleStatus.variant} className="mr-2">{ensureString(presaleStatus.text, "Status N/A")}</Badge> Presale
+                        <Badge variant={presaleStatus.variant} className="mr-2">{ensureString(presaleStatus.text, "Status N/A")}</Badge> 
+                        {presaleTokenSymbol ? `${presaleTokenSymbol} Presale` : "Presale"}
                     </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={() => refetchDetails()} disabled={isWritePending || isConfirming || isLoadingDetails} className="h-6 w-6 self-end sm:self-center"><RefreshCw className={`h-3 w-3 ${isWritePending || isConfirming || isLoadingDetails ? "animate-spin" : ""}`} /></Button>
+                    <Button variant="ghost" size="icon" onClick={() => refetchDetails()} disabled={isWritePending || isConfirming || isLoadingDetails || isLoadingAdditionalData} className="h-6 w-6 self-end sm:self-center"><RefreshCw className={`h-3 w-3 ${isWritePending || isConfirming || isLoadingDetails || isLoadingAdditionalData ? "animate-spin" : ""}`} /></Button>
                 </div>
                 <CardDescription className="text-xs font-mono break-all pt-1">{ensureString(presaleAddress)}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground mb-3 pt-2 border-t border-border">
+                    <div>
+                        <p className="font-medium text-foreground">Soft Cap:</p>
+                        <p>{formatCurrencyDisplay(softCap, paymentDecimalsToUse, paymentSymbolToUse)}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">Total Raised:</p>
+                        <p>{formatCurrencyDisplay(totalContributed, paymentDecimalsToUse, paymentSymbolToUse)}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">Start Time:</p>
+                        <p>{formatTimestamp(startTime, "startTime")}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">End Time:</p>
+                        <p>{formatTimestamp(endTime, "endTime")}</p>
+                    </div>
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => handleCreatorAction("finalize", [], "Finalize")} disabled={!canFinalize || isWritePending || isConfirming}>Finalize <EstimatedFeeDisplay fee={calculateFee(finalizeGas)} /></Button>
                     <Button size="sm" variant="outline" onClick={() => handleCreatorAction("cancel", [], "Cancel")} disabled={!canCancel || isWritePending || isConfirming}>Cancel <EstimatedFeeDisplay fee={calculateFee(cancelGas)} /></Button>
@@ -232,29 +360,31 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
                         {whitelistEnabled ? "Disable Whitelist" : "Enable Whitelist"} <EstimatedFeeDisplay fee={calculateFee(toggleWhitelistGas)} />
                     </Button>
 
-                    <Dialog open={dialogOpen === "extendClaim"} onOpenChange={(open) => !open && setDialogOpen(null)}>
+                    <Dialog open={dialogOpen === "extendClaim"} onOpenChange={(isOpen) => !isOpen && setDialogOpen(null)}>
                         <DialogTrigger asChild>
                             <Button size="sm" variant="outline" onClick={() => setDialogOpen("extendClaim")} disabled={!canExtendClaim || isWritePending || isConfirming}>Extend Claim</Button>
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader><DialogTitle>Extend Claim Deadline</DialogTitle></DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                <Label htmlFor="deadline">New Deadline (Unix Timestamp)</Label>
-                                <Input id="deadline" type="number" value={inputValue} onChange={(e) => setInputValue(e.target.value)} />
-                            </div>
+                            <Label htmlFor="extendTime">New Claim End Time (Unix Timestamp)</Label>
+                            <Input id="extendTime" type="number" placeholder="e.g., 1735689600" value={inputValue} onChange={(e) => setInputValue(e.target.value)} />
+                            <EstimatedFeeDisplay fee={calculateFee(extendClaimGas)} />
                             <DialogFooter>
-                                <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                                <Button onClick={() => handleCreatorAction("extendClaimDeadline", [BigInt(inputValue || "0")], "Extend Claim")} disabled={!inputValue || BigInt(inputValue || "0") <=0 || isWritePending || isConfirming}>Set Deadline <EstimatedFeeDisplay fee={calculateFee(extendClaimGas)} /></Button>
+                                <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
+                                <Button onClick={() => handleCreatorAction("extendClaimDeadline", [BigInt(inputValue || "0")], "Extend Claim")} disabled={isWritePending || isConfirming || !inputValue || BigInt(inputValue || "0") <= (options?.[11] || 0n) || BigInt(inputValue || "0") <= nowSeconds }>
+                                    Confirm <EstimatedFeeDisplay 
+  fee={calculateFee(extendClaimGas)} 
+ 
+/>
+
+                                </Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
-                    
-                     <Button size="sm" variant="outline" disabled title="Update Whitelist - Not Implemented">Update Whitelist</Button>
-                     <Button size="sm" variant="outline" disabled title="Rescue Tokens - Not Implemented">Rescue Tokens</Button>
                 </div>
-                {actionError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(actionError)}</AlertDescription></Alert>}
+                {actionError && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(actionError)}</AlertDescription></Alert>}
                 {(isWritePending || isConfirming) && 
-                    <Alert variant="default">
+                    <Alert variant="default" className="mt-2">
                         <Info className="h-4 w-4" />
                         <AlertDescription>{isConfirming ? "Confirming transaction..." : "Processing action..."} Tx: {shortenAddress(hash || undefined)}</AlertDescription>
                     </Alert>
@@ -278,24 +408,38 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
     const presaleContract = { address: presaleAddress, abi: presaleAbi } as const;
 
     const { data: presaleInfo, isLoading: isLoadingPresaleInfo, refetch: refetchPresaleInfo, isError: isErrorInfoGeneralHook, error: errorInfoGeneralHook } = useReadContracts({
-        allowFailure: true, 
+        allowFailure: true,
         contracts: [
-            { ...presaleContract, functionName: "options" },      
-            { ...presaleContract, functionName: "state" },        
-            { ...presaleContract, functionName: "contributions", args: [userAddress] }, 
-            { ...presaleContract, functionName: "claimed", args: [userAddress] },       
-        ]
+            { ...presaleContract, functionName: "options" },
+            { ...presaleContract, functionName: "state" },
+            { ...presaleContract, functionName: "contributions", args: [userAddress as Address] },
+            { ...presaleContract, functionName: "userClaimedAmount", args: [userAddress as Address] },
+            { ...presaleContract, functionName: "getTotalContributed" },
+            { ...presaleContract, functionName: "token" }, // Added to fetch the presale token address
+        ],
+        query: { enabled: !!userAddress && !!presaleAddress }
     });
 
     const optionsResult = presaleInfo?.[0];
     const stateResult = presaleInfo?.[1];
     const userContributionResult = presaleInfo?.[2];
     const userClaimedAmountResult = presaleInfo?.[3];
+    const totalContributedResult = presaleInfo?.[4]; 
+    const tokenAddressCallResultContributed = presaleInfo?.[5]; // Index for token() call
 
-    const options = optionsResult?.status === "success" ? optionsResult.result : undefined;
+    const options = optionsResult?.status === "success" ? optionsResult.result as any[] : undefined;
+    currentPresaleOptionsForTimestampContext = { state: stateResult?.status === "success" ? stateResult.result : undefined };
     const state = stateResult?.status === "success" ? stateResult.result as number : undefined;
-    const userContributionRaw = userContributionResult?.status === "success" ? userContributionResult.result as bigint : undefined;
     
+    let userContributionRaw: bigint | undefined = undefined;
+    if (userContributionResult?.status === "success") {
+        if (userContributionResult.result === null || (isHex(userContributionResult.result) && userContributionResult.result === "0x")) {
+            userContributionRaw = 0n;
+        } else {
+            userContributionRaw = userContributionResult.result as bigint;
+        }
+    }
+
     let userClaimedAmountRaw: bigint | undefined = undefined;
     if (userClaimedAmountResult?.status === "success") {
         if (userClaimedAmountResult.result === null || (isHex(userClaimedAmountResult.result) && userClaimedAmountResult.result === "0x")) {
@@ -305,15 +449,43 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
         }
     }
 
-    const tokenAddress = (options as any)?.[0] as Address | undefined;
-    const paymentTokenAddress = (options as any)?.[1] as Address | undefined;
-    const isNativeContribution = (options as any)?.[10] as boolean | undefined;
+    let totalPresaleContributed: bigint | undefined = undefined;
+    if (totalContributedResult?.status === "success") {
+        if (totalContributedResult.result === null || (isHex(totalContributedResult.result) && totalContributedResult.result === "0x")) {
+            totalPresaleContributed = 0n;
+        } else {
+            totalPresaleContributed = totalContributedResult.result as bigint;
+        }
+    }
 
-    const { data: presaleTokenDecimalsData, isLoading: isLoadingPresaleTokenDecimals } = useReadContract({ address: tokenAddress, abi: erc20Abi, functionName: "decimals", query: { enabled: !!tokenAddress }});
-    const presaleTokenDecimals = presaleTokenDecimalsData as number | undefined;
+    const presaleTokenAddressContributed = tokenAddressCallResultContributed?.status === "success" ? tokenAddressCallResultContributed.result as Address : undefined;
+    const paymentCurrencyAddress = options?.[15] as Address | undefined;
+    const isNativePaymentContribution = paymentCurrencyAddress === zeroAddress;
 
-    const { data: paymentTokenDecimalsData, isLoading: isLoadingPaymentTokenDecimals } = useReadContract({ address: paymentTokenAddress, abi: erc20Abi, functionName: "decimals", query: { enabled: !!paymentTokenAddress && paymentTokenAddress !== "0x0000000000000000000000000000000000000000" && !isNativeContribution }});
-    const paymentTokenDecimals = paymentTokenDecimalsData as number | undefined;
+    const softCap = options?.[2] as bigint | undefined;
+    const startTime = options?.[9] as bigint | undefined;
+    const endTime = options?.[10] as bigint | undefined;
+
+    const { data: presaleTokenDetails, isLoading: isLoadingPresaleTokenDetails } = useReadContracts({
+        allowFailure: true,
+        contracts: [
+            { address: presaleTokenAddressContributed, abi: erc20Abi, functionName: "decimals" },
+            { address: presaleTokenAddressContributed, abi: erc20Abi, functionName: "symbol" },
+        ]
+    });
+    const presaleTokenDecimals = presaleTokenDetails?.[0]?.status === "success" ? presaleTokenDetails[0].result as number : undefined;
+    const presaleTokenSymbol = presaleTokenDetails?.[1]?.status === "success" ? presaleTokenDetails[1].result as string : undefined;
+
+    const { data: paymentCurrencyDetails, isLoading: isLoadingPaymentCurrencyDetails } = useReadContracts({
+        allowFailure: true,
+        contracts: [
+            { address: paymentCurrencyAddress, abi: erc20Abi, functionName: "decimals" },
+            { address: paymentCurrencyAddress, abi: erc20Abi, functionName: "symbol" }
+        ]
+    });
+
+    const paymentDecimalsForDisplay = isNativePaymentContribution ? 18 : (paymentCurrencyDetails?.[0]?.status === "success" ? paymentCurrencyDetails[0].result as number : undefined);
+    const paymentSymbolForDisplay = isNativePaymentContribution ? "ETH" : (paymentCurrencyDetails?.[1]?.status === "success" ? paymentCurrencyDetails[1].result as string : undefined) ?? (paymentDecimalsForDisplay !== undefined ? "Tokens" : "raw units");
 
     const presaleStatus: PresaleStatusReturn = (options !== undefined && state !== undefined) ? getPresaleStatus(state, options) : { text: "Loading...", variant: "default" };
 
@@ -349,24 +521,36 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
         }
     };
 
-    const isLoadingAnyDecimals = isLoadingPresaleTokenDecimals || (!!paymentTokenAddress && paymentTokenAddress !== "0x0000000000000000000000000000000000000000" && !isNativeContribution && isLoadingPaymentTokenDecimals);
+    const isLoadingAdditionalData = isLoadingPresaleTokenDetails || isLoadingPaymentCurrencyDetails;
 
-    if (isLoadingPresaleInfo || isLoadingAnyDecimals) {
-        return <Card className="animate-pulse"><CardHeader><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2 mt-1" /></CardHeader><CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><div className="flex gap-2 mt-2"><Skeleton className="h-8 w-16" /><Skeleton className="h-8 w-16" /></div></CardContent></Card>;
+    const formatCurrencyDisplay = (value: bigint | undefined, decimals: number | undefined, symbol: string): string => {
+        if (value === undefined) return "N/A";
+        if (decimals !== undefined) {
+            return `${formatUnits(value, decimals)} ${symbol}`;
+        }
+        if (symbol !== "ETH" && value === 0n) return `0 ${symbol}`;
+        if (symbol !== "ETH") return `${ensureString(value)} raw units (${symbol} details pending)`;
+        return `${ensureString(value)} raw units`;
+    };
+
+    if (isLoadingPresaleInfo || isLoadingAdditionalData) {
+        return <Card className="animate-pulse"><CardHeader><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2 mt-1" /></CardHeader><CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /></div><div className="flex gap-2 mt-2"><Skeleton className="h-8 w-16" /><Skeleton className="h-8 w-16" /></div></CardContent></Card>;
     }
 
     let errorMessages: string[] = [];
     if (errorInfoGeneralHook) errorMessages.push(ensureString(errorInfoGeneralHook, "General presale info hook error."));
     presaleInfo?.forEach(result => {
         if (result?.status === "failure" && result.error) {
-            if (!(result === userClaimedAmountResult && (result.error as any)?.message?.includes("returned no data"))) {
+            if (!(result === userClaimedAmountResult && (result.error as any)?.message?.includes("returned no data")) && 
+                !(result === totalContributedResult && (result.error as any)?.message?.includes("returned no data"))) {
                  errorMessages.push(ensureString(result.error, "A contract call in presaleInfo failed."));
             }
         }
     });
     const combinedErrorMessage = errorMessages.length > 0 ? errorMessages.join("; ") : "Could not load necessary information.";
-    const hasReadError = isErrorInfoGeneralHook || presaleInfo?.some(r => r.status === "failure" && !(r === userClaimedAmountResult && (r.error as any)?.message?.includes("returned no data")));
-
+    const hasReadError = isErrorInfoGeneralHook || presaleInfo?.some(r => r.status === "failure" && 
+        !(r === userClaimedAmountResult && (r.error as any)?.message?.includes("returned no data")) && 
+        !(r === totalContributedResult && (r.error as any)?.message?.includes("returned no data")));
 
     if (hasReadError) {
         return (
@@ -379,23 +563,23 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
     
     let contributionDisplay = "N/A";
     if (userContributionRaw !== undefined) {
-        if (isNativeContribution) {
+        if (isNativePaymentContribution) {
             contributionDisplay = `${formatUnits(userContributionRaw, 18)} ETH`;
-        } else if (paymentTokenDecimals !== undefined) {
-            contributionDisplay = `${formatUnits(userContributionRaw, paymentTokenDecimals)} Tokens`;
+        } else if (paymentDecimalsForDisplay !== undefined) {
+            contributionDisplay = `${formatUnits(userContributionRaw, paymentDecimalsForDisplay)} ${paymentSymbolForDisplay}`;
         } else {
-            contributionDisplay = `${userContributionRaw.toString()} (raw units - payment token details unavailable)`;
+            contributionDisplay = `${ensureString(userContributionRaw)} raw units (payment token details pending)`;
         }
     }
 
     let claimedDisplay = "N/A";
     if (userClaimedAmountRaw !== undefined) {
         if (presaleTokenDecimals !== undefined) {
-            claimedDisplay = `${formatUnits(userClaimedAmountRaw, presaleTokenDecimals)} Tokens`;
+            claimedDisplay = `${formatUnits(userClaimedAmountRaw, presaleTokenDecimals)} ${presaleTokenSymbol || "Tokens"}`;
         } else if (userClaimedAmountRaw === 0n) {
-            claimedDisplay = "0 Tokens (presale token details unavailable)";
+            claimedDisplay = `0 ${presaleTokenSymbol || "Tokens"} (details pending)`;
         } else {
-            claimedDisplay = `${userClaimedAmountRaw.toString()} (raw units - presale token details unavailable)`;
+            claimedDisplay = `${ensureString(userClaimedAmountRaw)} raw units (${presaleTokenSymbol || "Token"} details pending)`;
         }
     }
 
@@ -403,7 +587,7 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
         <Card>
             <CardHeader>
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
-                    <CardTitle className="text-sm font-medium">Presale: {shortenAddress(presaleAddress)}</CardTitle>
+                    <CardTitle className="text-sm font-medium">{presaleTokenSymbol ? `${presaleTokenSymbol} Presale` : "Presale"}: {shortenAddress(presaleAddress)}</CardTitle>
                     <Badge variant={presaleStatus.variant} className="text-xs self-start sm:self-center">{ensureString(presaleStatus.text, "Status N/A")}</Badge>
                 </div>
             </CardHeader>
@@ -414,6 +598,26 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
                 <p className="text-xs text-muted-foreground">
                     Claimed: {claimedDisplay}
                 </p>
+                
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border">
+                    <div>
+                        <p className="font-medium text-foreground">Soft Cap:</p>
+                        <p>{formatCurrencyDisplay(softCap, paymentDecimalsForDisplay, paymentSymbolForDisplay)}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">Total Raised:</p>
+                        <p>{formatCurrencyDisplay(totalPresaleContributed, paymentDecimalsForDisplay, paymentSymbolForDisplay)}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">Start Time:</p>
+                        <p>{formatTimestamp(startTime, "startTime")}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">End Time:</p>
+                        <p>{formatTimestamp(endTime, "endTime")}</p>
+                    </div>
+                </div>
+
                 <div className="flex flex-wrap gap-2 mt-2">
                     <Button size="sm" onClick={() => handleUserAction("claim", "Claim")} disabled={!canClaim || isWritePending || isConfirming}>Claim</Button>
                     <Button size="sm" variant="outline" onClick={() => handleUserAction("refund", "Refund")} disabled={!canRefund || isWritePending || isConfirming}>Refund</Button>
@@ -432,9 +636,7 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
 
 const UserProfilePage = () => {
     const { address, isConnected } = useAccount();
-    const { data: ensName } = useEnsName({ address });
-    const avatarUrl = getEnsAvatar(ensName || undefined);
-
+  
     const { data: allPresalesFromFactory, isLoading: isLoadingAllPresales, refetch: refetchAllPresalesFromFactory, error: errorAllPresales } = useReadContract({
         abi: factoryAbi,
         address: factoryAddress,
@@ -500,12 +702,11 @@ const UserProfilePage = () => {
     }
 
     const isLoading = isLoadingAllPresales || isLoadingCreated || isLoadingContributedAddresses;
-    const mainEnsName = ensName || undefined;
+
     const mainAddress = address || undefined;
 
     return (
         <div className="container mx-auto p-4 max-w-5xl">
-            {/* Back to Presale Button - Top Right of Content Area */}
             <div className="flex justify-end mb-4">
                 <Link to="/presales">
                     <Button variant="outline" size="sm">
@@ -515,18 +716,11 @@ const UserProfilePage = () => {
                 </Link>
             </div>
 
-            <Card className="mb-6">
-                <CardHeader className="flex flex-col sm:flex-row items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 sm:p-6">
-                    <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
-                        <AvatarImage src={avatarUrl} alt={ensureString(mainEnsName || mainAddress, "User")} />
-                        <AvatarFallback className="text-2xl sm:text-3xl">{ensureString(mainEnsName ? mainEnsName.substring(0, 2) : mainAddress ? mainAddress.substring(2, 4) : "U")}</AvatarFallback>
-                    </Avatar>
-                    <div className="text-center sm:text-left">
-                        <CardTitle className="text-lg sm:text-xl break-all">{ensureString(mainEnsName || shortenAddress(mainAddress))}</CardTitle>
-                        <CardDescription className="text-xs font-mono break-all mt-1">{ensureString(mainAddress)}</CardDescription>
-                    </div>
-                </CardHeader>
-            </Card>
+            {/* Add the Farcaster Profile Section right here */}
+<div className="mb-6">
+   <FarcasterProfileSDKDisplay address={mainAddress} size="lg" showBadge={true} />
+
+</div>
 
             <Tabs defaultValue="created">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
@@ -541,9 +735,9 @@ const UserProfilePage = () => {
                     </Button>
                 </div>
                 <TabsContent value="created">
-                    {isLoadingCreated && <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">{[...Array(2)].map((_,i) => <Card key={i} className="animate-pulse"><CardHeader><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full mt-1" /></CardHeader><CardContent><Skeleton className="h-8 w-full" /></CardContent></Card>)}</div>}
-                    {errorAllPresales && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading all presales list: {ensureString(errorAllPresales)}</AlertDescription></Alert>}
-                    {isErrorCreatedHook && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading created presales: {ensureString(errorCreatedHook)}</AlertDescription></Alert>}
+                    {isLoadingCreated && <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">{[...Array(2)].map((_,i) => <Card key={i} className="animate-pulse"><CardHeader><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full mt-1" /></CardHeader><CardContent><div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground mb-3 pt-2 border-t border-border"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /></div><Skeleton className="h-8 w-full" /></CardContent></Card>)}</div>}
+                    {errorAllPresales && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading all presales list: {ensureString(errorAllPresales.message)}</AlertDescription></Alert>}
+                    {isErrorCreatedHook && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading created presales: {ensureString(errorCreatedHook?.message)}</AlertDescription></Alert>}
                     {!isLoadingCreated && !isErrorCreatedHook && !errorAllPresales && (
                         createdPresalesData && createdPresalesData.length > 0 ? (
                             <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
@@ -557,19 +751,14 @@ const UserProfilePage = () => {
                     )}
                 </TabsContent>
                 <TabsContent value="contributed">
-                    {isLoadingContributedAddresses && <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">{[...Array(2)].map((_,i) => <Card key={i} className="animate-pulse"><CardHeader><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2 mt-1" /></CardHeader><CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><div className="flex gap-2 mt-2"><Skeleton className="h-8 w-16" /><Skeleton className="h-8 w-16" /></div></CardContent></Card>)}</div>}
-                    {errorAllPresales && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading all presales list: {ensureString(errorAllPresales)}</AlertDescription></Alert>}
-                    {isErrorContributedAddressesHook && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading list of contributed presales: {ensureString(errorContributedAddressesHook)}</AlertDescription></Alert>}
+                    {isLoadingContributedAddresses && <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">{[...Array(2)].map((_,i) => <Card key={i} className="animate-pulse"><CardHeader><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2 mt-1" /></CardHeader><CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /></div><div className="flex gap-2 mt-2"><Skeleton className="h-8 w-16" /><Skeleton className="h-8 w-16" /></div></CardContent></Card>)}</div>}
+                    {errorAllPresales && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading all presales list: {ensureString(errorAllPresales.message)}</AlertDescription></Alert>}
+                    {isErrorContributedAddressesHook && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading list of contributed presales: {ensureString(errorContributedAddressesHook?.message)}</AlertDescription></Alert>}
                     {!isLoadingContributedAddresses && !isErrorContributedAddressesHook && !errorAllPresales && (
                         contributedPresalesAddresses && contributedPresalesAddresses.length > 0 ? (
                             <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
                                 {contributedPresalesAddresses.map((presaleAddr) => (
-                                    <ContributedPresaleCard 
-                                        key={presaleAddr} 
-                                        presaleAddress={presaleAddr} 
-                                        userAddress={address as Address} 
-                                        refetchContributedPresalesList={refetchContributedPresalesAddresses} 
-                                    />
+                                    <ContributedPresaleCard key={presaleAddr} presaleAddress={presaleAddr} userAddress={address} refetchContributedPresalesList={refetchContributedPresalesAddresses} />
                                 ))}
                             </div>
                         ) : (
@@ -578,7 +767,7 @@ const UserProfilePage = () => {
                     )}
                 </TabsContent>
                 <TabsContent value="vesting">
-                    <p className="text-muted-foreground text-center py-4">Vesting functionality is not yet implemented.</p>
+                    <p className="text-muted-foreground text-center py-4">Vesting details are not yet implemented.</p>
                 </TabsContent>
             </Tabs>
         </div>
@@ -586,4 +775,3 @@ const UserProfilePage = () => {
 };
 
 export default UserProfilePage;
-

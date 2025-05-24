@@ -1,0 +1,18 @@
+{
+  "accountAssociation": {
+    "header": "eyJmaWQiOjEwNDI1MjIsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhjRjlCNjczZTM3NmM2ZGQwMDliNDNlQzc2MTM5YUVhYmRBMDJCNjRlIn0",
+    "payload": "eyJkb21haW4iOiJyYWl6ZS01Lm5ldGxpZnkuYXBwIn0",
+    "signature": "MHgyNGE2OTYzOWU2OWYxZjY3MjI2MTcyYTQ3NjE2YmRlMjkyOTkxMDFiNGIzYjc5NzkwNGI4Njc0NDEzNmM0Y2E0MTViN2M4YzhiOWY0MDQxNGZkYmY2MWMxN2M5YmQxZWI3MjZiOWQyYjM5NjEzMGVjY2YyYzkyMjY5MDA4ZDU2ODFj"
+  },
+  "frame": {
+    "version": "1",
+    "name": "Raize",
+    "iconUrl": "https://raize-5.netlify.app/icon.png",
+    "homeUrl": "https://raize-5.netlify.app",
+    "imageUrl": "https://raize-5.netlify.app/image.png",
+    "buttonTitle": "Check this out",
+    "splashImageUrl": "https://raize-5.netlify.app/splash.png",
+    "splashBackgroundColor": "#1f2937",
+    "webhookUrl": "https://api.neynar.com/f/app/77af59ea-8cfa-48b1-a199-6b0eec64fddb/event"
+  }
+}

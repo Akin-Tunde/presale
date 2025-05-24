@@ -85,6 +85,35 @@ const parseMerkleProof = (input: string): `0x${string}`[] => {
     .filter((s) => isBytes(s));
 };
 
+// Helper to format lockup duration from seconds to days
+const formatLockupDuration = (seconds: bigint | undefined): string => {
+  if (seconds === undefined || seconds === 0n) return "0 days";
+  const days = Number(seconds) / (60 * 60 * 24);
+  return `${days.toFixed(0)} days`;
+};
+
+// Helper to format liquidity BPS to percentage
+const formatLiquidityBps = (bps: bigint | undefined): string => {
+  if (bps === undefined) return "N/A";
+  const percentage = Number(bps) / 100;
+  return `${percentage.toFixed(2)}%`;
+};
+
+// Helper to interpret leftover token option
+const getLeftoverTokenDestination = (option: bigint | undefined): string => {
+  if (option === undefined) return "N/A";
+  switch (option) {
+    case 0n: // Assuming 0 is Refund based on common patterns
+      return "Burn";
+    case 1n: // Assuming 1 is Burn
+      return "Refund to Creator";
+    case 2n: // Assuming 2 is Vest or similar
+      return "Sent to vesting contract"; // This might need adjustment based on actual contract logic
+    default:
+      return "Undefined option";
+  }
+};
+
 // Styled Skeleton Component for Detail Page
 const PresaleDetailSkeleton = () => (
   <div className="space-y-6 animate-pulse">
@@ -232,7 +261,7 @@ const PresaleDetailPage = () => {
       { ...presaleContractConfig, functionName: "options" },
       { ...presaleContractConfig, functionName: "state" },
       { ...presaleContractConfig, functionName: "token" },
-      { ...presaleContractConfig, functionName: "totalRaised" },
+      { ...presaleContractConfig, functionName: "getTotalContributed" },
       { ...presaleContractConfig, functionName: "paused" },
       { ...presaleContractConfig, functionName: "getContributorCount" },
       { ...presaleContractConfig, functionName: "claimDeadline" },
@@ -332,7 +361,7 @@ const PresaleDetailPage = () => {
   const allowance = allowanceResult as bigint | undefined;
 
   // --- Derived State & Calculations ---
-  const presaleStatus: PresaleStatus = getPresaleStatus(state, options);
+const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
   const hardCap = options?.[1] as bigint | undefined;
   const softCap = options?.[2] as bigint | undefined;
   const minContrib = options?.[3] as bigint | undefined;
@@ -340,6 +369,9 @@ const PresaleDetailPage = () => {
   const presaleRate = options?.[5] as bigint | undefined;
   const startTime = options?.[9] as bigint | undefined;
   const endTime = options?.[10] as bigint | undefined;
+  const liquidityBps = options?.[7] as bigint | undefined;
+  const lockupDurationSeconds = options?.[11] as bigint | undefined;
+  const leftoverTokenOption = options?.[14] as bigint | undefined;
   const progress =
     hardCap && totalContributed && hardCap > 0n
       ? Number(((totalContributed as bigint) * 10000n) / (hardCap as bigint)) /
@@ -833,6 +865,30 @@ const PresaleDetailPage = () => {
                   </div>
                 )}
             </div>
+            {/* Liquidity & Unsold Tokens Section */}
+            <div className="bg-primary-50 rounded-lg p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200">
+              <div className="text-primary-900 font-medium mb-2 flex items-center">
+                <Lock className="h-4 w-4 mr-2 text-primary-700" /> Liquidity & Unsold
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Liquidity Percent:{" "}
+                <span className="font-semibold text-foreground">
+                  {liquidityBps !== undefined ? formatLiquidityBps(liquidityBps) : "N/A"}
+                </span>
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Lockup Duration:{" "}
+                <span className="font-semibold text-foreground">
+                  {lockupDurationSeconds !== undefined ? formatLockupDuration(lockupDurationSeconds) : "N/A"}
+                </span>
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Unsold Tokens:{" "}
+                <span className="font-semibold text-foreground">
+                  {leftoverTokenOption !== undefined ? getLeftoverTokenDestination(leftoverTokenOption) : "N/A"}
+                </span>
+              </div>
+            </div>
           </div>
 
           {isVestingEnabled && (
@@ -908,7 +964,9 @@ const PresaleDetailPage = () => {
                     className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
                   >
                     {isApproving ? "Approving..." : "Approve"}
-                    {approveFee && <EstimatedFeeDisplay fee={approveFee} />}
+                  {typeof approveFee === "bigint" && approveFee !== 0n && (
+  <EstimatedFeeDisplay fee={approveFee} />
+)}
                   </Button>
                 ) : (
                   <Button
@@ -919,9 +977,9 @@ const PresaleDetailPage = () => {
                     {isWritePending && currentAction === "contribute"
                       ? "Contributing..."
                       : "Contribute"}
-                    {contributeFee && (
-                      <EstimatedFeeDisplay fee={contributeFee} />
-                    )}
+                  {typeof contributeFee === "bigint" && contributeFee !== 0n && (
+  <EstimatedFeeDisplay fee={contributeFee} />
+)}
                   </Button>
                 )}
               </div>
@@ -948,7 +1006,9 @@ const PresaleDetailPage = () => {
                 {isWritePending && currentAction === "claim"
                   ? "Claiming..."
                   : "Claim"}
-                {claimFee && <EstimatedFeeDisplay fee={claimFee} />}
+                {typeof claimFee === "bigint" && claimFee !== 0n && (
+  <EstimatedFeeDisplay fee={claimFee} />
+)}
               </Button>
             </div>
           )}
@@ -973,7 +1033,9 @@ const PresaleDetailPage = () => {
                 {isWritePending && currentAction === "refund"
                   ? "Refunding..."
                   : "Refund"}
-                {refundFee && <EstimatedFeeDisplay fee={refundFee} />}
+                {typeof refundFee === "bigint" && refundFee !== 0n && (
+  <EstimatedFeeDisplay fee={refundFee} />
+)}
               </Button>
             </div>
           )}

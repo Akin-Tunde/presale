@@ -8,10 +8,10 @@ import { Menu } from "lucide-react";
 import { FaTwitter, FaFacebook, FaYoutube } from "react-icons/fa";
 
 // Custom theme colors
-const colors = {
-  primary: "#134942", // Deep teal
-  white: "#FFFFFF",
-};
+//const colors = {
+ // primary: "#134942", // Deep teal
+ // white: "#FFFFFF",
+//};
 
 interface LayoutProps {
   children?: React.ReactNode;
@@ -27,10 +27,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           {/* Logo/Brand Name */}
           <Link to="/" className="mr-8 flex items-center space-x-2">
             <div className="w-8 h-8 rounded-full bg-emerald-800 flex items-center justify-center">
-              <span className="text-white font-bold text-sm">PD</span>
+              <span className="text-white font-bold text-sm">RD</span>
             </div>
             <span className="font-bold text-emerald-800 text-lg tracking-tight">
-              Presale DApp
+              Raize
             </span>
           </Link>
 
@@ -87,7 +87,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                       <span className="text-white font-bold text-sm">PD</span>
                     </div>
                     <span className="font-bold text-emerald-800">
-                      Presale DApp
+                      Raize
                     </span>
                   </Link>
                   <div className="space-y-4">
@@ -227,7 +227,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           </div>
           <div className="mt-8 pt-6 border-t border-emerald-700 text-center md:text-left">
             <p className="text-sm text-emerald-100">
-              © {new Date().getFullYear()} Presale DApp. All rights reserved.
+              © {new Date().getFullYear()} Raize DApp. All rights reserved.
             </p>
           </div>
         </div>
