@@ -90,30 +90,31 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
   const [customImageError, setCustomImageError] = useState(false);
   const [trustWalletImageError, setTrustWalletImageError] = useState(false);
 
-  
-// Fetch the custom presale image from Supabase
-useEffect(() => {
-  const fetchPresaleImage = async () => {
-    if (presaleAddress) {
-      try {
-        const imageUrl = await getPresaleImage(presaleAddress);
-        if (imageUrl) {
-          setPresaleImageUrl(imageUrl);
-          setCustomImageError(false); // Reset error state when we get a new URL
-        }
-      } catch (error: unknown) { // Add the unknown type annotation here
-        console.error("Error fetching presale image:", error);
-      
-        if (error instanceof Error && error.message === "Invalid API key") {
-          console.warn("Supabase API key issue - check your environment variables");
+  // Fetch the custom presale image from Supabase
+  useEffect(() => {
+    const fetchPresaleImage = async () => {
+      if (presaleAddress) {
+        try {
+          const imageUrl = await getPresaleImage(presaleAddress);
+          if (imageUrl) {
+            setPresaleImageUrl(imageUrl);
+            setCustomImageError(false); // Reset error state when we get a new URL
+          }
+        } catch (error: unknown) {
+          // Add the unknown type annotation here
+          console.error("Error fetching presale image:", error);
+
+          if (error instanceof Error && error.message === "Invalid API key") {
+            console.warn(
+              "Supabase API key issue - check your environment variables"
+            );
+          }
         }
       }
-    }
-  };
-  
-  fetchPresaleImage();
-}, [presaleAddress]);
+    };
 
+    fetchPresaleImage();
+  }, [presaleAddress]);
 
   const presaleContract = {
     address: presaleAddress,
@@ -201,7 +202,7 @@ useEffect(() => {
     isLoadingCurrencyDecimals;
 
   // Get badge styles based on status
-  const getBadgeStyles = (variant: string ) => {
+  const getBadgeStyles = (variant: string) => {
     switch (variant) {
       case "success":
         return "bg-green-100 text-green-800 border-green-200";
@@ -220,15 +221,21 @@ useEffect(() => {
   // Share URLs
   const appUrl = "https://raize-5.netlify.app";
   const presalePageUrl = `${appUrl}/presale/${presaleAddress}`;
-  
+
   // Create share text with presale name and token details
-  const shareText = `Check out this presale on Raize: ${tokenSymbol || "Token"} (${currencyDisplaySymbol} ) - Ends: ${formatDate(endTime)}`;
-  
+  const shareText = `Check out this presale on Raize: ${
+    tokenSymbol || "Token"
+  } (${currencyDisplaySymbol} ) - Ends: ${formatDate(endTime)}`;
+
   // Create Warpcast share URL
-  const warpcastShareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(shareText )}&embeds[]=${encodeURIComponent(presalePageUrl)}`;
-  
+  const warpcastShareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
+    shareText
+  )}&embeds[]=${encodeURIComponent(presalePageUrl)}`;
+
   // Create Twitter share URL
-  const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText )}&url=${encodeURIComponent(presalePageUrl)}`;
+  const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+    shareText
+  )}&url=${encodeURIComponent(presalePageUrl)}`;
 
   // Skeleton Loader
   if (isLoading) {
@@ -269,25 +276,26 @@ useEffect(() => {
               className="block"
             />
           )}
-          
+
           {/* If no custom image or it failed, try the Trust Wallet logo */}
-          {(!presaleImageUrl || customImageError) && logoUrl && !trustWalletImageError && (
-            <AvatarImage
-              src={logoUrl}
-              alt={`${tokenSymbol || "Token"} logo`}
-              onError={() => setTrustWalletImageError(true)}
-              className="block"
-            />
-          )}
-          
+          {(!presaleImageUrl || customImageError) &&
+            logoUrl &&
+            !trustWalletImageError && (
+              <AvatarImage
+                src={logoUrl}
+                alt={`${tokenSymbol || "Token"} logo`}
+                onError={() => setTrustWalletImageError(true)}
+                className="block"
+              />
+            )}
+
           {/* Fallback to initials if both images fail */}
-          {((!presaleImageUrl || customImageError) && (!logoUrl || trustWalletImageError)) && (
-            <AvatarFallback
-              className="bg-[#13494215] text-[#134942] font-bold text-xl"
-            >
-              {getInitials(tokenSymbol)}
-            </AvatarFallback>
-          )}
+          {(!presaleImageUrl || customImageError) &&
+            (!logoUrl || trustWalletImageError) && (
+              <AvatarFallback className="bg-[#13494215] text-[#134942] font-bold text-xl">
+                {getInitials(tokenSymbol)}
+              </AvatarFallback>
+            )}
         </Avatar>
         <div className="flex-1 space-y-1">
           <CardTitle className="text-lg font-bold text-[#134942] leading-tight group-hover:translate-x-0.5 transition-transform duration-300">
@@ -343,8 +351,8 @@ useEffect(() => {
       </CardContent>
       <CardFooter className="flex justify-between items-center pt-2 pb-4">
         <Link to={`/presale/${presaleAddress}`} className="block">
-          <Button 
-            variant="default" 
+          <Button
+            variant="default"
             size="sm"
             className="bg-[#134942] hover:bg-[#0d322d] text-white rounded-md px-4 py-2 transition-colors"
           >
@@ -353,8 +361,8 @@ useEffect(() => {
         </Link>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               className="border border-[#13494240] hover:bg-[#13494210] hover:text-[#134942] rounded-md px-3 py-2 transition-colors"
             >
@@ -363,30 +371,30 @@ useEffect(() => {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem asChild>
-              <a 
-                href={warpcastShareUrl} 
-                target="_blank" 
+              <a
+                href={warpcastShareUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center cursor-pointer"
               >
-                <img 
-                  src="https://warpcast.com/favicon.ico" 
-                  alt="Warpcast" 
-                  className="h-4 w-4 mr-2" 
+                <img
+                  src="https://warpcast.com/favicon.ico"
+                  alt="Warpcast"
+                  className="h-4 w-4 mr-2"
                 />
                 Share on Warpcast
               </a>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <a 
-                href={twitterShareUrl} 
-                target="_blank" 
+              <a
+                href={twitterShareUrl}
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center cursor-pointer"
               >
-                <svg 
-                  xmlns="http://www.w3.org/2000/svg" 
-                  viewBox="0 0 24 24" 
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
                   className="h-4 w-4 mr-2 fill-current"
                 >
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
@@ -398,7 +406,7 @@ useEffect(() => {
         </DropdownMenu>
       </CardFooter>
     </Card>
-   );
+  );
 };
 
 export default PresaleCard;
