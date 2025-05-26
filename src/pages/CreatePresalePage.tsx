@@ -5,30 +5,171 @@ import React, {
   ChangeEvent,
   FormEvent,
 } from "react";
-import { ethers, BigNumber } from "ethers"; // Assuming ethers v5
+import {
+  useAccount,
+  useConnect,
+  useWriteContract,
+  useReadContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { parseEther, parseUnits, isAddress, zeroAddress, zeroHash } from "viem";
+import { createClient } from "@supabase/supabase-js";
+import { sepolia } from "viem/chains";
+import { createConfig, http } from "@wagmi/core";
+import { getAccount, getPublicClient, getWalletClient } from "@wagmi/core";
 
-// --- ABIs (as used in the HTML version) ---
+// Supabase client setup (replace with your Supabase URL and anon key)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Wagmi configuration
+const config = createConfig({
+  chains: [sepolia],
+  transports: {
+    [sepolia.id]: http(),
+  },
+});
+
+// ABIs
 const factoryAbi = [
-  "function createPresale(tuple(uint256 tokenDeposit, uint256 hardCap, uint256 softCap, uint256 min, uint256 max, uint256 presaleRate, uint256 listingRate, uint256 liquidityBps, uint256 slippageBps, uint256 start, uint256 end, uint256 lockupDuration, uint256 vestingPercentage, uint256 vestingDuration, uint256 leftoverTokenOption, address currency, uint8 whitelistType, bytes32 merkleRoot, address nftContractAddress) memory options, address _token, address _weth, address _uniswapV2Router02) payable returns (address presaleContract)",
-  "function creationFee() view returns (uint256)",
-  "function feeToken() view returns (address)",
-  "function calculateTotalTokensNeededForPresale(tuple(uint256 tokenDeposit, uint256 hardCap, uint256 softCap, uint256 min, uint256 max, uint256 presaleRate, uint256 listingRate, uint256 liquidityBps, uint256 slippageBps, uint256 start, uint256 end, uint256 lockupDuration, uint256 vestingPercentage, uint256 vestingDuration, uint256 leftoverTokenOption, address currency, uint8 whitelistType, bytes32 merkleRoot, address nftContractAddress) memory options, address _token) view returns (uint256 totalTokens)",
+  {
+    inputs: [
+      {
+        components: [
+          { name: "tokenDeposit", type: "uint256" },
+          { name: "hardCap", type: "uint256" },
+          { name: "softCap", type: "uint256" },
+          { name: "min", type: "uint256" },
+          { name: "max", type: "uint256" },
+          { name: "presaleRate", type: "uint256" },
+          { name: "listingRate", type: "uint256" },
+          { name: "liquidityBps", type: "uint256" },
+          { name: "slippageBps", type: "uint256" },
+          { name: "start", type: "uint256" },
+          { name: "end", type: "uint256" },
+          { name: "lockupDuration", type: "uint256" },
+          { name: "vestingPercentage", type: "uint256" },
+          { name: "vestingDuration", type: "uint256" },
+          { name: "leftoverTokenOption", type: "uint256" },
+          { name: "currency", type: "address" },
+          { name: "whitelistType", type: "uint8" },
+          { name: "merkleRoot", type: "bytes32" },
+          { name: "nftContractAddress", type: "address" },
+        ],
+        name: "options",
+        type: "tuple",
+      },
+      { name: "_token", type: "address" },
+      { name: "_weth", type: "address" },
+      { name: "_uniswapV2Router02", type: "address" },
+    ],
+    name: "createPresale",
+    outputs: [{ name: "presaleContract", type: "address" }],
+    stateMutability: "payable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "creationFee",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "feeToken",
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
+        components: [
+          { name: "tokenDeposit", type: "uint256" },
+          { name: "hardCap", type: "uint256" },
+          { name: "softCap", type: "uint256" },
+          { name: "min", type: "uint256" },
+          { name: "max", type: "uint256" },
+          { name: "presaleRate", type: "uint256" },
+          { name: "listingRate", type: "uint256" },
+          { name: "liquidityBps", type: "uint256" },
+          { name: "slippageBps", type: "uint256" },
+          { name: "start", type: "uint256" },
+          { name: "end", type: "uint256" },
+          { name: "lockupDuration", type: "uint256" },
+          { name: "vestingPercentage", type: "uint256" },
+          { name: "vestingDuration", type: "uint256" },
+          { name: "leftoverTokenOption", type: "uint256" },
+          { name: "currency", type: "address" },
+          { name: "whitelistType", type: "uint8" },
+          { name: "merkleRoot", type: "bytes32" },
+          { name: "nftContractAddress", type: "address" },
+        ],
+        name: "options",
+        type: "tuple",
+      },
+      { name: "_token", type: "address" },
+    ],
+    name: "calculateTotalTokensNeededForPresale",
+    outputs: [{ name: "totalTokens", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ];
 
 const erc20Abi = [
-  "function approve(address spender, uint256 amount) public returns (bool)",
-  "function allowance(address owner, address spender) public view returns (uint256)",
-  "function decimals() public view returns (uint8)",
-  "function balanceOf(address account) public view returns (uint256)",
-  "function symbol() public view returns (string)",
+  {
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    name: "approve",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    name: "allowance",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "decimals",
+    outputs: [{ name: "", type: "uint8" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [{ name: "account", type: "address" }],
+    name: "balanceOf",
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "symbol",
+    outputs: [{ name: "", type: "string" }],
+    stateMutability: "view",
+    type: "function",
+  },
 ];
 
-// --- CONFIGURATION (Update these with your actual addresses or pass as props) ---
-const FACTORY_ADDRESS = "0x7b676709cBF74bD668F380c2434aF18c4F75934f"; // Example, use your deployed factory
-const WETH_ADDRESS = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14"; // Example, use WETH for your network
-const UNISWAP_V2_ROUTER = "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3"; // Example, use Router for your network
+// Configuration
+const FACTORY_ADDRESS = "0x7b676709cBF74bD668F380c2434aF18c4F75934f";
+const WETH_ADDRESS = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14";
+const UNISWAP_V2_ROUTER = "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3";
 
-// --- Helper Functions ---
+// Helper Functions
 const formatDateForInput = (date: Date | null | undefined): string => {
   if (!date) return "";
   const pad = (num: number) => num.toString().padStart(2, "0");
@@ -38,7 +179,7 @@ const formatDateForInput = (date: Date | null | undefined): string => {
 };
 
 const isValidAddress = (address: string): boolean => {
-  return address === "" || ethers.utils.isAddress(address);
+  return address === "" || isAddress(address);
 };
 
 interface FormDataState {
@@ -66,21 +207,10 @@ interface FormDataState {
   nftContractAddress: string;
 }
 
-// Augment the Window interface
-interface ExtendedWindow extends Window {
-  ethereum?: any; // Consider using a more specific type if available from ethers or your project
-}
-declare let window: ExtendedWindow;
-
 const CreatePresalePage: React.FC = () => {
-  const [account, setAccount] = useState<string | null>(null);
-  const [provider, setProvider] =
-    useState<ethers.providers.Web3Provider | null>(null);
-  const [signer, setSigner] = useState<ethers.Signer | null>(null);
-
-  const initialStartTime = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
-  const initialEndTime = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-
+  const { address, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { writeContractAsync } = useWriteContract();
   const [formData, setFormData] = useState<FormDataState>({
     tokenAddress: "",
     currencyAddress: "",
@@ -93,8 +223,8 @@ const CreatePresalePage: React.FC = () => {
     maxContribution: "1",
     liquidityBps: "7000",
     lockupDuration: (30 * 24 * 60 * 60).toString(),
-    start: formatDateForInput(initialStartTime),
-    end: formatDateForInput(initialEndTime),
+    start: formatDateForInput(new Date(Date.now() + 5 * 60 * 1000)),
+    end: formatDateForInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     claimDelayMinutes: "10",
     useVesting: false,
     vestingTgePercent: "10",
@@ -105,7 +235,6 @@ const CreatePresalePage: React.FC = () => {
     merkleRoot: "",
     nftContractAddress: "",
   });
-
   const [tokenDeposit, setTokenDeposit] = useState<string>("0");
   const [creationFee, setCreationFee] = useState<string>("0");
   const [creationFeeTokenAddress, setCreationFeeTokenAddress] = useState<
@@ -117,103 +246,171 @@ const CreatePresalePage: React.FC = () => {
   const [tokenBalance, setTokenBalance] = useState<string>("0");
   const [tokenDecimals, setTokenDecimals] = useState<number>(18);
   const [tokenSymbol, setTokenSymbol] = useState<string>("");
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined);
+  const { data: receipt, isLoading: isTxPending } =
+    useWaitForTransactionReceipt({ hash: txHash });
 
+  // Fetch factory fee and fee token
+  const { data: creationFeeData } = useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: factoryAbi,
+    functionName: "creationFee",
+  });
+  const { data: feeTokenAddress } = useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: factoryAbi,
+    functionName: "feeToken",
+  });
+
+  // Fetch token details
+  const { data: tokenDecimalsData } = useReadContract({
+    address: formData.tokenAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "decimals",
+    query: { enabled: isValidAddress(formData.tokenAddress) },
+  });
+  const { data: tokenSymbolData } = useReadContract({
+    address: formData.tokenAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "symbol",
+    query: { enabled: isValidAddress(formData.tokenAddress) },
+  });
+  const { data: tokenBalanceData } = useReadContract({
+    address: formData.tokenAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [address],
+    query: { enabled: isConnected && isValidAddress(formData.tokenAddress) },
+  });
+
+  // Initialize provider and fetch fee details
   useEffect(() => {
     const init = async () => {
-      if (window.ethereum) {
-        const web3Provider = new ethers.providers.Web3Provider(
-          window.ethereum as any
-        );
-        setProvider(web3Provider);
-        if (!FACTORY_ADDRESS || !isValidAddress(FACTORY_ADDRESS)) {
-          setStatus("Configuration Error: Invalid Factory Address.");
-          return;
-        }
-        const factoryContract = new ethers.Contract(
-          FACTORY_ADDRESS,
-          factoryAbi,
-          web3Provider
-        );
-        try {
-          const fee = await factoryContract.creationFee();
-          const feeTokenAddr = await factoryContract.feeToken();
-          setCreationFeeTokenAddress(feeTokenAddr);
-
-          if (feeTokenAddr && feeTokenAddr !== ethers.constants.AddressZero) {
-            const feeTokenContract = new ethers.Contract(
-              feeTokenAddr,
-              erc20Abi,
-              web3Provider
+      if (!FACTORY_ADDRESS || !isValidAddress(FACTORY_ADDRESS)) {
+        setStatus("Configuration Error: Invalid Factory Address.");
+        return;
+      }
+      try {
+        if (creationFeeData && feeTokenAddress) {
+          setCreationFeeTokenAddress(feeTokenAddress as `0x${string}`);
+          if (feeTokenAddress !== zeroAddress) {
+            const publicClient = getPublicClient(config);
+            const feeTokenSymbol = (await publicClient.readContract({
+              address: feeTokenAddress as `0x${string}`,
+              abi: erc20Abi,
+              functionName: "symbol",
+            })) as string;
+            const feeTokenDecimals = (await publicClient.readContract({
+              address: feeTokenAddress as `0x${string}`,
+              abi: erc20Abi,
+              functionName: "decimals",
+            })) as number;
+            setCreationFee(
+              (Number(creationFeeData) / 10 ** feeTokenDecimals).toString()
             );
-            const symbol = await feeTokenContract.symbol();
-            const decimals = await feeTokenContract.decimals();
-            setCreationFee(ethers.utils.formatUnits(fee, decimals));
-            setCreationFeeTokenSymbol(symbol);
+            setCreationFeeTokenSymbol(feeTokenSymbol);
           } else {
-            setCreationFee(ethers.utils.formatEther(fee));
+            setCreationFee((Number(creationFeeData) / 10 ** 18).toString());
             setCreationFeeTokenSymbol("ETH");
           }
           setStatus("Factory fee loaded. Ready to connect.");
-        } catch (error: any) {
-          console.error("Error fetching fee details:", error);
-          setStatus(
-            `Error fetching fee details: ${
-              error.message || "Unknown error"
-            }. Check console.`
-          );
-        }
-      } else {
-        setStatus("Please install MetaMask!");
-      }
-    };
-    init();
-  }, []);
-
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
-        setAccount(accounts[0]);
-        if (provider) {
-          const currentSigner = provider.getSigner();
-          setSigner(currentSigner);
-          setStatus(
-            `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`
-          );
-          fetchTokenDetails(formData.tokenAddress, currentSigner);
         }
       } catch (error: any) {
-        console.error("Wallet connection failed:", error);
+        console.error("Error fetching fee details:", error);
         setStatus(
-          `Wallet connection failed: ${
+          `Error fetching fee details: ${
             error.message || "Unknown error"
           }. Check console.`
         );
       }
+    };
+    init();
+  }, [creationFeeData, feeTokenAddress]);
+
+  // Update token details
+  useEffect(() => {
+    if (tokenDecimalsData) setTokenDecimals(Number(tokenDecimalsData));
+    if (tokenSymbolData) setTokenSymbol(tokenSymbolData as string);
+    if (tokenBalanceData && tokenDecimalsData) {
+      setTokenBalance(
+        (Number(tokenBalanceData) / 10 ** Number(tokenDecimalsData)).toFixed(0)
+      );
+    }
+  }, [tokenDecimalsData, tokenSymbolData, tokenBalanceData]);
+
+  // Handle transaction receipt
+  useEffect(() => {
+    if (receipt && receipt.status === "success") {
+      setStatus(`Presale created successfully! Tx: ${receipt.transactionHash}`);
+      // Save presale data to Supabase
+      const savePresale = async () => {
+        try {
+          const { error } = await supabase.from("presales").insert([
+            {
+              creator: address,
+              token_address: formData.tokenAddress,
+              currency_address: formData.currencyAddress || zeroAddress,
+              presale_rate: formData.presaleRate,
+              listing_rate: formData.listingRate,
+              hard_cap: formData.hardCap,
+              soft_cap: formData.softCap,
+              min_contribution: formData.minContribution,
+              max_contribution: formData.maxContribution,
+              liquidity_bps: formData.liquidityBps,
+              lockup_duration: formData.lockupDuration,
+              start_time: formData.start,
+              end_time: formData.end,
+              claim_delay_minutes: formData.claimDelayMinutes,
+              use_vesting: formData.useVesting,
+              vesting_tge_percent: formData.vestingTgePercent,
+              vesting_cycle_days: formData.vestingCycleDays,
+              leftover_token_option: formData.leftoverTokenOption,
+              slippage_bps: formData.slippageBps,
+              whitelist_type: formData.whitelistType,
+              merkle_root: formData.merkleRoot || zeroHash,
+              nft_contract_address: formData.nftContractAddress || zeroAddress,
+              transaction_hash: receipt.transactionHash,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+          if (error) throw error;
+          setStatus(
+            `Presale created and saved successfully! Tx: ${receipt.transactionHash}`
+          );
+        } catch (error: any) {
+          console.error("Error saving presale to Supabase:", error);
+          setStatus(
+            `Presale created but failed to save to Supabase: ${error.message}`
+          );
+        }
+      };
+      savePresale();
+    } else if (receipt && receipt.status === "reverted") {
+      setStatus("Transaction failed: Reverted. Check console.");
+    }
+  }, [receipt, address, formData]);
+
+  const connectWallet = () => {
+    if (connectors.length > 0) {
+      connect({ connector: connectors[0] });
     } else {
-      setStatus("Please install MetaMask!");
+      setStatus("No wallet connectors available. Please install MetaMask.");
     }
   };
 
-  const validateAndParseAddress = (addr: string, fieldName: string): string => {
+  const validateAndParseAddress = (
+    addr: string,
+    fieldName: string
+  ): `0x${string}` => {
     if (addr && !isValidAddress(addr)) {
       setStatus(`Invalid ${fieldName} address.`);
-      return ethers.constants.AddressZero; // Or handle error differently
+      return zeroAddress as `0x${string}`;
     }
-    return addr || ethers.constants.AddressZero;
+    return (addr || zeroAddress) as `0x${string}`;
   };
 
-  const fetchTokenDetails = async (
-    tokenAddress: string,
-    currentSignerOrProvider: ethers.Signer | ethers.providers.Provider | null
-  ) => {
-    if (
-      !currentSignerOrProvider ||
-      !tokenAddress ||
-      !isValidAddress(tokenAddress)
-    ) {
+  const fetchTokenDetails = async (tokenAddress: string) => {
+    if (!isValidAddress(tokenAddress)) {
       setTokenDecimals(18);
       setTokenSymbol("");
       setTokenBalance("0");
@@ -221,44 +418,11 @@ const CreatePresalePage: React.FC = () => {
         setStatus("Invalid token address for fetching details.");
       return false;
     }
-    try {
-      const tokenContract = new ethers.Contract(
-        tokenAddress,
-        erc20Abi,
-        currentSignerOrProvider
-      );
-      const decimals = await tokenContract.decimals();
-      const symbol = await tokenContract.symbol();
-      setTokenDecimals(decimals);
-      setTokenSymbol(symbol);
-      if (account) {
-        const balance = await tokenContract.balanceOf(account);
-        setTokenBalance(
-          ethers.utils.formatUnits(balance, decimals).split(".")[0]
-        );
-      }
-      setStatus(`Token ${symbol} (Decimals: ${decimals}) details loaded.`);
-      return true;
-    } catch (error: any) {
-      console.error("Error fetching token details:", error);
-      setStatus(
-        `Error fetching token details: ${
-          error.message || "Is it a valid ERC20 token?"
-        }`
-      );
-      setTokenDecimals(18);
-      setTokenSymbol("");
-      return false;
-    }
+    return true;
   };
 
   const calculateAndSetTokenDeposit = useCallback(async () => {
-    if (
-      !provider ||
-      !FACTORY_ADDRESS ||
-      !formData.tokenAddress ||
-      !isValidAddress(formData.tokenAddress)
-    ) {
+    if (!formData.tokenAddress || !isValidAddress(formData.tokenAddress)) {
       setTokenDeposit("0");
       return;
     }
@@ -279,79 +443,59 @@ const CreatePresalePage: React.FC = () => {
     }
 
     try {
-      const factoryContract = new ethers.Contract(
-        FACTORY_ADDRESS,
-        factoryAbi,
-        provider
-      );
-      let currentTokenDecimals = tokenDecimals;
-      // A simple check, might need refinement if ensAddress isn't suitable for this check on all networks
-      const network = await factoryContract.provider.getNetwork();
-      if (formData.tokenAddress !== network.ensAddress) {
-        const tokenContract = new ethers.Contract(
-          formData.tokenAddress,
-          erc20Abi,
-          provider
-        );
-        try {
-          currentTokenDecimals = await tokenContract.decimals();
-          setTokenDecimals(currentTokenDecimals);
-        } catch {
-          /* ignore, use previous */
-        }
-      }
-
+      const publicClient = getPublicClient(config);
       const options = {
-        tokenDeposit: BigNumber.from(0),
-        hardCap: ethers.utils.parseEther(formData.hardCap || "0"),
-        softCap: ethers.utils.parseEther(formData.softCap || "0"),
-        min: ethers.utils.parseEther(formData.minContribution || "0"),
-        max: ethers.utils.parseEther(formData.maxContribution || "0"),
-        presaleRate: BigNumber.from(
+        tokenDeposit: BigInt(0),
+        hardCap: parseEther(formData.hardCap || "0"),
+        softCap: parseEther(formData.softCap || "0"),
+        min: parseEther(formData.minContribution || "0"),
+        max: parseEther(formData.maxContribution || "0"),
+        presaleRate: BigInt(
           Math.floor(parseFloat(formData.presaleRate || "0"))
         ),
-        listingRate: BigNumber.from(
+        listingRate: BigInt(
           Math.floor(parseFloat(formData.listingRate || "0"))
         ),
-        liquidityBps: parseInt(formData.liquidityBps || "0"),
-        slippageBps: parseInt(formData.slippageBps || "0"),
+        liquidityBps: BigInt(parseInt(formData.liquidityBps || "0")),
+        slippageBps: BigInt(parseInt(formData.slippageBps || "0")),
         start: formData.start
-          ? Math.floor(new Date(formData.start).getTime() / 1000)
-          : 0,
+          ? BigInt(Math.floor(new Date(formData.start).getTime() / 1000))
+          : BigInt(0),
         end: formData.end
-          ? Math.floor(new Date(formData.end).getTime() / 1000)
-          : 0,
-        lockupDuration: parseInt(formData.lockupDuration || "0"),
+          ? BigInt(Math.floor(new Date(formData.end).getTime() / 1000))
+          : BigInt(0),
+        lockupDuration: BigInt(parseInt(formData.lockupDuration || "0")),
         vestingPercentage: formData.useVesting
-          ? parseInt(formData.vestingTgePercent || "0") * 100
-          : 0,
+          ? BigInt(parseInt(formData.vestingTgePercent || "0") * 100)
+          : BigInt(0),
         vestingDuration: formData.useVesting
-          ? parseInt(formData.vestingCycleDays || "0") * 24 * 60 * 60
-          : 0,
-        leftoverTokenOption: parseInt(formData.leftoverTokenOption || "0"),
+          ? BigInt(parseInt(formData.vestingCycleDays || "0") * 24 * 60 * 60)
+          : BigInt(0),
+        leftoverTokenOption: BigInt(
+          parseInt(formData.leftoverTokenOption || "0")
+        ),
         currency: validateAndParseAddress(formData.currencyAddress, "Currency"),
-        whitelistType: parseInt(formData.whitelistType || "0"),
-        merkleRoot:
-          formData.whitelistType === "1" && formData.merkleRoot
-            ? formData.merkleRoot
-            : ethers.constants.HashZero,
-        nftContractAddress:
-          formData.whitelistType === "2" && formData.nftContractAddress
-            ? validateAndParseAddress(
-                formData.nftContractAddress,
-                "NFT Contract"
-              )
-            : ethers.constants.AddressZero,
+        whitelistType: BigInt(parseInt(formData.whitelistType || "0")),
+        merkleRoot: (formData.whitelistType === "1" && formData.merkleRoot
+          ? formData.merkleRoot
+          : zeroHash) as `0x${string}`,
+        nftContractAddress: (formData.whitelistType === "2" &&
+        formData.nftContractAddress
+          ? validateAndParseAddress(formData.nftContractAddress, "NFT Contract")
+          : zeroAddress) as `0x${string}`,
       };
 
-      const totalTokensNeeded =
-        await factoryContract.calculateTotalTokensNeededForPresale(
-          options,
-          formData.tokenAddress
-        );
-      const formattedTokens = ethers.utils
-        .formatUnits(totalTokensNeeded, currentTokenDecimals)
-        .split(".")[0];
+      const totalTokensNeeded = (await publicClient.readContract({
+        address: FACTORY_ADDRESS as `0x${string}`,
+        abi: factoryAbi,
+        functionName: "calculateTotalTokensNeededForPresale",
+        args: [options, formData.tokenAddress as `0x${string}`],
+      })) as bigint;
+
+      const formattedTokens = (
+        Number(totalTokensNeeded) /
+        10 ** tokenDecimals
+      ).toFixed(0);
       setTokenDeposit(formattedTokens);
       setStatus(
         `Required token deposit: ${formattedTokens} ${tokenSymbol || "tokens"}.`
@@ -365,7 +509,7 @@ const CreatePresalePage: React.FC = () => {
         }`
       );
     }
-  }, [provider, formData, tokenDecimals, tokenSymbol, account]);
+  }, [formData, tokenDecimals, tokenSymbol]);
 
   useEffect(() => {
     calculateAndSetTokenDeposit();
@@ -393,18 +537,11 @@ const CreatePresalePage: React.FC = () => {
       newFormData = { ...formData, [name]: value };
     }
     setFormData(newFormData);
-
     setStatus("");
 
     if (name === "tokenAddress") {
       if (isValidAddress(value)) {
-        fetchTokenDetails(
-          value,
-          provider ||
-            (window.ethereum
-              ? new ethers.providers.Web3Provider(window.ethereum as any)
-              : null)
-        );
+        await fetchTokenDetails(value);
       } else if (value !== "") {
         setStatus("Invalid token address format.");
         setTokenDecimals(18);
@@ -418,29 +555,23 @@ const CreatePresalePage: React.FC = () => {
         setTokenDeposit("0");
       }
     }
-    // Add other specific input validations as in HTML version if needed
   };
 
   const checkTokenBalanceAndDetails = async () => {
     if (
-      !signer ||
+      !isConnected ||
       !formData.tokenAddress ||
       !isValidAddress(formData.tokenAddress)
     ) {
       setStatus("Connect wallet and enter a valid token address.");
       return;
     }
-    const fetched = await fetchTokenDetails(formData.tokenAddress, signer);
-    if (fetched && account) {
-      const tokenContract = new ethers.Contract(
-        formData.tokenAddress,
-        erc20Abi,
-        signer
-      );
-      const balance = await tokenContract.balanceOf(account);
-      const formattedBalance = ethers.utils
-        .formatUnits(balance, tokenDecimals)
-        .split(".")[0];
+    const fetched = await fetchTokenDetails(formData.tokenAddress);
+    if (fetched && address && tokenBalanceData && tokenDecimalsData) {
+      const formattedBalance = (
+        Number(tokenBalanceData) /
+        10 ** Number(tokenDecimalsData)
+      ).toFixed(0);
       setTokenBalance(formattedBalance);
       setStatus(
         `Token: ${tokenSymbol}, Balance: ${formattedBalance}, Decimals: ${tokenDecimals}`
@@ -457,7 +588,7 @@ const CreatePresalePage: React.FC = () => {
     type: string
   ) => {
     if (
-      !signer ||
+      !isConnected ||
       !tokenAddr ||
       !isValidAddress(tokenAddr) ||
       !spenderAddr ||
@@ -474,18 +605,20 @@ const CreatePresalePage: React.FC = () => {
     }
 
     try {
-      const tokenContract = new ethers.Contract(tokenAddr, erc20Abi, signer);
       const amountInWei =
         type === "Max"
-          ? ethers.constants.MaxUint256
-          : ethers.utils.parseUnits(amountToApprove, tokenDecimalsToUse);
-
+          ? BigInt(2 ** 256 - 1)
+          : parseUnits(amountToApprove, tokenDecimalsToUse);
       setStatus(
         `Approving ${tokenSymbolToUse || type} (${amountToApprove})...`
       );
-      const tx = await tokenContract.approve(spenderAddr, amountInWei);
-      await tx.wait();
-      setStatus(`${tokenSymbolToUse || type} approved successfully!`);
+      const hash = await writeContractAsync({
+        address: tokenAddr as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "approve",
+        args: [spenderAddr as `0x${string}`, amountInWei],
+      });
+      setTxHash(hash);
       return true;
     } catch (error: any) {
       console.error(`Error approving ${type}:`, error);
@@ -515,11 +648,8 @@ const CreatePresalePage: React.FC = () => {
     );
   };
 
-  const handleApproveFeeToken = () => {
-    if (
-      !creationFeeTokenAddress ||
-      creationFeeTokenAddress === ethers.constants.AddressZero
-    ) {
+  const handleApproveFeeToken = async () => {
+    if (!creationFeeTokenAddress || creationFeeTokenAddress === zeroAddress) {
       setStatus("Fee is in ETH, no token approval needed.");
       return;
     }
@@ -527,45 +657,41 @@ const CreatePresalePage: React.FC = () => {
       setStatus("Creation fee is zero, no approval needed.");
       return;
     }
-    const feeTokenContract = new ethers.Contract(
-      creationFeeTokenAddress,
-      erc20Abi,
-      provider as ethers.providers.Provider
-    );
-    feeTokenContract
-      .decimals()
-      .then((feeDecimals: number) => {
-        approveToken(
-          creationFeeTokenAddress!,
-          creationFee,
-          FACTORY_ADDRESS,
-          feeDecimals,
-          creationFeeTokenSymbol,
-          "Fee Token"
-        );
-      })
-      .catch((err: any) => {
-        setStatus("Could not get fee token decimals for approval.");
-        console.error("Fee token decimals error:", err);
-      });
+    try {
+      const publicClient = getPublicClient(config);
+      const feeDecimals = (await publicClient.readContract({
+        address: creationFeeTokenAddress as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "decimals",
+      })) as number;
+      await approveToken(
+        creationFeeTokenAddress,
+        creationFee,
+        FACTORY_ADDRESS,
+        feeDecimals,
+        creationFeeTokenSymbol,
+        "Fee Token"
+      );
+    } catch (err: any) {
+      setStatus("Could not get fee token decimals for approval.");
+      console.error("Fee token decimals error:", err);
+    }
   };
 
   const createPresale = async () => {
-    if (!signer) {
+    if (!isConnected) {
       setStatus("Please connect wallet.");
       return;
     }
     setStatus("Validating parameters...");
 
-    // --- Comprehensive Validation (simplified for brevity, expand as needed) ---
     if (
       !isValidAddress(formData.tokenAddress) ||
-      formData.tokenAddress === ethers.constants.AddressZero
+      formData.tokenAddress === zeroAddress
     ) {
       setStatus("Invalid or missing Token Address.");
       return;
     }
-    // ... (Add all validations from HTML version)
     if (tokenDeposit === "0" || parseFloat(tokenDeposit) <= 0) {
       setStatus(
         "Calculated token deposit is zero or invalid. Check parameters and recalculate."
@@ -573,49 +699,44 @@ const CreatePresalePage: React.FC = () => {
       return;
     }
 
-    // Check allowance for presale token
-    const tokenContract = new ethers.Contract(
-      formData.tokenAddress,
-      erc20Abi,
-      signer
-    );
-    const requiredTokenAmountWei = ethers.utils.parseUnits(
-      tokenDeposit,
-      tokenDecimals
-    );
-    const allowance = await tokenContract.allowance(account!, FACTORY_ADDRESS);
-    if (allowance.lt(requiredTokenAmountWei)) {
+    // Check presale token allowance
+    const publicClient = getPublicClient(config);
+    const requiredTokenAmountWei = parseUnits(tokenDeposit, tokenDecimals);
+    const allowance = (await publicClient.readContract({
+      address: formData.tokenAddress as `0x${string}`,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [address!, FACTORY_ADDRESS as `0x${string}`],
+    })) as bigint;
+    if (allowance < requiredTokenAmountWei) {
       setStatus(
-        `Insufficient presale token allowance. Need ${tokenDeposit}, approved ${ethers.utils.formatUnits(
-          allowance,
-          tokenDecimals
-        )}. Please approve.`
+        `Insufficient presale token allowance. Need ${tokenDeposit}, approved ${(
+          Number(allowance) /
+          10 ** tokenDecimals
+        ).toFixed(0)}. Please approve.`
       );
       return;
     }
 
-    // Check allowance for fee token
+    // Check fee token allowance
     if (
       creationFeeTokenAddress &&
-      creationFeeTokenAddress !== ethers.constants.AddressZero &&
+      creationFeeTokenAddress !== zeroAddress &&
       parseFloat(creationFee) > 0
     ) {
-      const feeTokenContract = new ethers.Contract(
-        creationFeeTokenAddress,
-        erc20Abi,
-        signer
-      );
-      const feeTokenDecimalsResult = await feeTokenContract.decimals(); // Ethers v5 returns BigNumber for decimals
-      const feeTokenDecimals = feeTokenDecimalsResult.toNumber(); // Convert BigNumber to number
-      const requiredFeeAmountWei = ethers.utils.parseUnits(
-        creationFee,
-        feeTokenDecimals
-      );
-      const feeAllowance = await feeTokenContract.allowance(
-        account!,
-        FACTORY_ADDRESS
-      );
-      if (feeAllowance.lt(requiredFeeAmountWei)) {
+      const feeTokenDecimals = (await publicClient.readContract({
+        address: creationFeeTokenAddress as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "decimals",
+      })) as number;
+      const requiredFeeAmountWei = parseUnits(creationFee, feeTokenDecimals);
+      const feeAllowance = (await publicClient.readContract({
+        address: creationFeeTokenAddress as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [address!, FACTORY_ADDRESS as `0x${string}`],
+      })) as bigint;
+      if (feeAllowance < requiredFeeAmountWei) {
         setStatus(
           `Insufficient fee token allowance. Need ${creationFee} ${creationFeeTokenSymbol}. Please approve.`
         );
@@ -626,75 +747,63 @@ const CreatePresalePage: React.FC = () => {
     setStatus("All checks passed. Preparing transaction...");
 
     try {
-      const factoryContract = new ethers.Contract(
-        FACTORY_ADDRESS,
-        factoryAbi,
-        signer
-      );
       const presaleOptions = {
-        tokenDeposit: requiredTokenAmountWei,
-        hardCap: ethers.utils.parseEther(formData.hardCap),
-        softCap: ethers.utils.parseEther(formData.softCap),
-        min: ethers.utils.parseEther(formData.minContribution),
-        max: ethers.utils.parseEther(formData.maxContribution),
-        presaleRate: BigNumber.from(
-          Math.floor(parseFloat(formData.presaleRate))
-        ),
-        listingRate: BigNumber.from(
-          Math.floor(parseFloat(formData.listingRate))
-        ),
-        liquidityBps: parseInt(formData.liquidityBps),
-        slippageBps: parseInt(formData.slippageBps),
-        start: Math.floor(new Date(formData.start).getTime() / 1000),
-        end: Math.floor(new Date(formData.end).getTime() / 1000),
-        lockupDuration: parseInt(formData.lockupDuration),
+        tokenDeposit: parseUnits(tokenDeposit, tokenDecimals),
+        hardCap: parseEther(formData.hardCap),
+        softCap: parseEther(formData.softCap),
+        min: parseEther(formData.minContribution),
+        max: parseEther(formData.maxContribution),
+        presaleRate: BigInt(Math.floor(parseFloat(formData.presaleRate))),
+        listingRate: BigInt(Math.floor(parseFloat(formData.listingRate))),
+        liquidityBps: BigInt(parseInt(formData.liquidityBps)),
+        slippageBps: BigInt(parseInt(formData.slippageBps)),
+        start: BigInt(Math.floor(new Date(formData.start).getTime() / 1000)),
+        end: BigInt(Math.floor(new Date(formData.end).getTime() / 1000)),
+        lockupDuration: BigInt(parseInt(formData.lockupDuration)),
         vestingPercentage: formData.useVesting
-          ? parseInt(formData.vestingTgePercent) * 100
-          : 0,
+          ? BigInt(parseInt(formData.vestingTgePercent) * 100)
+          : BigInt(0),
         vestingDuration: formData.useVesting
-          ? parseInt(formData.vestingCycleDays) * 24 * 60 * 60
-          : 0,
-        leftoverTokenOption: parseInt(formData.leftoverTokenOption),
+          ? BigInt(parseInt(formData.vestingCycleDays) * 24 * 60 * 60)
+          : BigInt(0),
+        leftoverTokenOption: BigInt(parseInt(formData.leftoverTokenOption)),
         currency: validateAndParseAddress(formData.currencyAddress, "Currency"),
-        whitelistType: parseInt(formData.whitelistType),
-        merkleRoot:
-          formData.whitelistType === "1" && formData.merkleRoot
-            ? formData.merkleRoot
-            : ethers.constants.HashZero,
-        nftContractAddress:
-          formData.whitelistType === "2" && formData.nftContractAddress
-            ? validateAndParseAddress(
-                formData.nftContractAddress,
-                "NFT Contract"
-              )
-            : ethers.constants.AddressZero,
+        whitelistType: BigInt(parseInt(formData.whitelistType)),
+        merkleRoot: (formData.whitelistType === "1" && formData.merkleRoot
+          ? formData.merkleRoot
+          : zeroHash) as `0x${string}`,
+        nftContractAddress: (formData.whitelistType === "2" &&
+        formData.nftContractAddress
+          ? validateAndParseAddress(formData.nftContractAddress, "NFT Contract")
+          : zeroAddress) as `0x${string}`,
       };
 
-      let txOptions: { gasLimit: BigNumber; value?: BigNumber } = {
-        gasLimit: BigNumber.from(5000000),
-      };
-
-      if (
-        !creationFeeTokenAddress ||
-        creationFeeTokenAddress === ethers.constants.AddressZero
-      ) {
+      let txOptions: { gas: bigint; value?: bigint } = { gas: BigInt(5000000) };
+      if (!creationFeeTokenAddress || creationFeeTokenAddress === zeroAddress) {
         if (parseFloat(creationFee) > 0) {
-          txOptions.value = ethers.utils.parseEther(creationFee);
+          txOptions.value = parseEther(creationFee);
         }
       }
 
       setStatus("Sending transaction to create presale...");
       try {
-        const gasEstimate = await factoryContract.estimateGas.createPresale(
-          presaleOptions,
-          formData.tokenAddress,
-          WETH_ADDRESS,
-          UNISWAP_V2_ROUTER,
-          txOptions
-        );
-        txOptions.gasLimit = gasEstimate.mul(120).div(100);
+        const walletClient = await getWalletClient(config);
+        const gasEstimate = await publicClient.estimateContractGas({
+          address: FACTORY_ADDRESS as `0x${string}`,
+          abi: factoryAbi,
+          functionName: "createPresale",
+          args: [
+            presaleOptions,
+            formData.tokenAddress as `0x${string}`,
+            WETH_ADDRESS as `0x${string}`,
+            UNISWAP_V2_ROUTER as `0x${string}`,
+          ],
+          account: address!,
+          value: txOptions.value,
+        });
+        txOptions.gas = (gasEstimate * BigInt(120)) / BigInt(100);
         setStatus(
-          `Gas estimated: ${txOptions.gasLimit.toString()}. Creating presale...`
+          `Gas estimated: ${txOptions.gas.toString()}. Creating presale...`
         );
       } catch (gasError: any) {
         console.warn("Gas estimation failed, using manual limit:", gasError);
@@ -705,32 +814,30 @@ const CreatePresalePage: React.FC = () => {
         );
       }
 
-      const tx = await factoryContract.createPresale(
-        presaleOptions,
-        formData.tokenAddress,
-        WETH_ADDRESS,
-        UNISWAP_V2_ROUTER,
-        txOptions
-      );
-      setStatus(`Transaction sent: ${tx.hash}. Waiting for confirmation...`);
-      await tx.wait();
-      setStatus(`Presale created successfully! Tx: ${tx.hash}`);
+      const hash = await writeContractAsync({
+        address: FACTORY_ADDRESS as `0x${string}`,
+        abi: factoryAbi,
+        functionName: "createPresale",
+        args: [
+          presaleOptions,
+          formData.tokenAddress as `0x${string}`,
+          WETH_ADDRESS as `0x${string}`,
+          UNISWAP_V2_ROUTER as `0x${string}`,
+        ],
+        gas: txOptions.gas,
+        value: txOptions.value,
+      });
+      setTxHash(hash);
+      setStatus(`Transaction sent: ${hash}. Waiting for confirmation...`);
     } catch (error: any) {
       console.error("Error creating presale:", error);
-      let errorMessage = error.message;
-      if (error.data && error.data.message) {
-        errorMessage = error.data.message;
-      } else if (error.reason) {
-        errorMessage = error.reason;
-      }
-      setStatus(`Error creating presale: ${errorMessage}. Check console.`);
-      if (error.data) console.log("Revert data:", error.data);
+      setStatus(`Error creating presale: ${error.message || "Check console."}`);
     }
   };
 
   interface FormInputProps {
     label: string;
-    name: keyof FormDataState | string; // Allow specific keys or general string for checkboxes like 'useVesting'
+    name: keyof FormDataState | string;
     type?: string;
     placeholder?: string;
     value?: string | number | boolean;
@@ -739,8 +846,7 @@ const CreatePresalePage: React.FC = () => {
     info?: string;
     error?: string;
     required?: boolean;
-    checked?: boolean; // For checkbox
-    // Allow any other standard HTML input props
+    checked?: boolean;
     [key: string]: any;
   }
 
@@ -816,7 +922,7 @@ const CreatePresalePage: React.FC = () => {
           Create Your Token Presale
         </h1>
 
-        {!account ? (
+        {!isConnected ? (
           <button
             className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition ease-in-out duration-150 font-medium mb-4"
             onClick={connectWallet}
@@ -839,11 +945,8 @@ const CreatePresalePage: React.FC = () => {
           </div>
         )}
 
-        {account && (
-          <form
-            onSubmit={(e: FormEvent) => e.preventDefault()}
-            className="space-y-4"
-          >
+        {isConnected && (
+          <div className="space-y-4">
             <SectionTitle title="Token & Currency Information" />
             <FormInput
               label="Token Address"
@@ -894,7 +997,6 @@ const CreatePresalePage: React.FC = () => {
                 info="For initial DEX liquidity"
               />
             </div>
-            {/* ... (rest of the form structure from the HTML version) ... */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormInput
                 label="Hard Cap"
@@ -1014,7 +1116,7 @@ const CreatePresalePage: React.FC = () => {
             <SectionTitle title="Vesting (Optional)" />
             <div className="flex items-center">
               <FormInput
-                label="" // No visible label for the checkbox itself, handled by the sibling label
+                label=""
                 name="useVesting"
                 type="checkbox"
                 checked={formData.useVesting}
@@ -1125,16 +1227,18 @@ const CreatePresalePage: React.FC = () => {
                 type="button"
                 className="w-full bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
                 onClick={checkTokenBalanceAndDetails}
+                disabled={isTxPending}
               >
                 Refresh Token Balance & Details
               </button>
               {creationFeeTokenAddress &&
-                creationFeeTokenAddress !== ethers.constants.AddressZero &&
+                creationFeeTokenAddress !== zeroAddress &&
                 parseFloat(creationFee) > 0 && (
                   <button
                     type="button"
                     className="w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50"
                     onClick={handleApproveFeeToken}
+                    disabled={isTxPending}
                   >
                     Approve Fee Token ({creationFeeTokenSymbol})
                   </button>
@@ -1143,6 +1247,7 @@ const CreatePresalePage: React.FC = () => {
                 type="button"
                 className="w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50"
                 onClick={handleApprovePresaleToken}
+                disabled={isTxPending}
               >
                 Approve Presale Token ({tokenSymbol || "Token"})
               </button>
@@ -1150,11 +1255,12 @@ const CreatePresalePage: React.FC = () => {
                 type="button"
                 className="w-full bg-green-600 text-white py-2.5 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 font-semibold text-lg"
                 onClick={createPresale}
+                disabled={isTxPending}
               >
                 Create Presale
               </button>
             </div>
-          </form>
+          </div>
         )}
       </div>
     </div>
