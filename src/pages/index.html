@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Presale Factory</title>
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+
+      // PresaleFactory ABI
+      const factoryAbi = [
+        "function createPresale(tuple(uint256 tokenDeposit, uint256 hardCap, uint256 softCap, uint256 min, uint256 max, uint256 presaleRate, uint256 listingRate, uint256 liquidityBps, uint256 slippageBps, uint256 start, uint256 end, uint256 lockupDuration, uint256 vestingPercentage, uint256 vestingDuration, uint256 leftoverTokenOption, address currency, uint8 whitelistType, bytes32 merkleRoot, address nftContractAddress), address _token, address _weth, address _uniswapV2Router02) payable returns (address)",
+        "function creationFee() view returns (uint256)",
+        "function feeToken() view returns (address)",
+        "function calculateTotalTokensNeededForPresale(tuple(uint256 tokenDeposit, uint256 hardCap, uint256 softCap, uint256 min, uint256 max, uint256 presaleRate, uint256 listingRate, uint256 liquidityBps, uint256 slippageBps, uint256 start, uint256 end, uint256 lockupDuration, uint256 vestingPercentage, uint256 vestingDuration, uint256 leftoverTokenOption, address currency, uint8 whitelistType, bytes32 merkleRoot, address nftContractAddress), address _token) view returns (uint256)",
+      ];
+
+      // ERC20 ABI
+      const erc20Abi = [
+        "function approve(address spender, uint256 amount) public returns (bool)",
+        "function allowance(address owner, address spender) public view returns (uint256)",
+        "function decimals() public view returns (uint8)",
+        "function balanceOf(address account) public view returns (uint256)",
+      ];
+
+      const FACTORY_ADDRESS = "0x7b676709cBF74bD668F380c2434aF18c4F75934f";
+      const WETH_ADDRESS = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14";
+      const UNISWAP_V2_ROUTER = "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3";
+
+      function App() {
+        const [account, setAccount] = useState(null);
+        const [provider, setProvider] = useState(null);
+        const [signer, setSigner] = useState(null);
+        const [formData, setFormData] = useState({
+          tokenAddress: "",
+          currencyAddress: "",
+          start: "",
+          end: "",
+          hardCap: "",
+          softCap: "",
+          min: "",
+          max: "",
+          presaleRate: "",
+          listingRate: "",
+          liquidityBps: "",
+          slippageBps: "",
+          lockupDuration: "",
+          vestingPercentage: "",
+          vestingDuration: "",
+          leftoverTokenOption: "0",
+          whitelistType: "0",
+          merkleRoot: "",
+          nftContractAddress: "",
+        });
+        const [tokenDeposit, setTokenDeposit] = useState("0");
+        const [creationFee, setCreationFee] = useState("0");
+        const [feeToken, setFeeToken] = useState(null);
+        const [status, setStatus] = useState("");
+        const [tokenBalance, setTokenBalance] = useState("0");
+        const [tokenDecimals, setTokenDecimals] = useState(18);
+
+        // Initialize provider and fetch fee details
+        useEffect(() => {
+          const init = async () => {
+            if (window.ethereum) {
+              const web3Provider = new ethers.providers.Web3Provider(
+                window.ethereum
+              );
+              setProvider(web3Provider);
+              const factoryContract = new ethers.Contract(
+                FACTORY_ADDRESS,
+                factoryAbi,
+                web3Provider
+              );
+              try {
+                const fee = await factoryContract.creationFee();
+                const token = await factoryContract.feeToken();
+                setCreationFee(ethers.utils.formatEther(fee));
+                setFeeToken(token);
+              } catch (error) {
+                console.error("Error fetching fee details:", error);
+                setStatus("Error fetching fee details");
+              }
+            } else {
+              setStatus("Please install MetaMask");
+            }
+          };
+          init();
+        }, []);
+
+        // Connect wallet
+        const connectWallet = async () => {
+          if (window.ethereum) {
+            try {
+              const accounts = await window.ethereum.request({
+                method: "eth_requestAccounts",
+              });
+              setAccount(accounts[0]);
+              setSigner(provider.getSigner());
+              setStatus(
+                `Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(
+                  -4
+                )}`
+              );
+            } catch (error) {
+              console.error("Wallet connection failed:", error);
+              setStatus("Wallet connection failed");
+            }
+          }
+        };
+
+        // Validate address
+        const isValidAddress = (address) => {
+          return address === "" || ethers.utils.isAddress(address);
+        };
+
+        // Validate token or currency address
+        const validateContractAddress = async (address, type) => {
+          if (!address || address === ethers.constants.AddressZero) return true;
+          try {
+            const contract = new ethers.Contract(address, erc20Abi, provider);
+            await contract.decimals();
+            return true;
+          } catch {
+            setStatus(`Invalid ${type} address: Not a valid ERC20 contract`);
+            return false;
+          }
+        };
+
+        // Check token balance and decimals
+        const checkTokenBalance = async () => {
+          if (
+            !signer ||
+            !formData.tokenAddress ||
+            !isValidAddress(formData.tokenAddress)
+          ) {
+            setStatus("Please enter a valid token address");
+            return;
+          }
+          try {
+            const tokenContract = new ethers.Contract(
+              formData.tokenAddress,
+              erc20Abi,
+              provider
+            );
+            const decimals = await tokenContract.decimals();
+            setTokenDecimals(decimals);
+            const balance = await tokenContract.balanceOf(account);
+            const formattedBalance = ethers.utils
+              .formatUnits(balance, decimals)
+              .split(".")[0];
+            setTokenBalance(formattedBalance);
+            setStatus(
+              `Token balance: ${formattedBalance} (Decimals: ${decimals})`
+            );
+          } catch (error) {
+            console.error("Error checking token balance:", error);
+            setStatus("Error checking token balance");
+          }
+        };
+
+        // Handle form input changes and calculate tokenDeposit
+        const handleInputChange = async (e) => {
+          const { name, value } = e.target;
+          const newFormData = { ...formData, [name]: value };
+          setFormData(newFormData);
+
+          // Validate inputs
+          if (name === "tokenAddress" && value && !isValidAddress(value)) {
+            setStatus("Invalid token address");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "currencyAddress" && value && !isValidAddress(value)) {
+            setStatus("Invalid currency address");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "hardCap" && value && parseFloat(value) <= 0) {
+            setStatus("Hard cap must be greater than 0");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "softCap" && value && parseFloat(value) <= 0) {
+            setStatus("Soft cap must be greater than 0");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "min" && value && parseFloat(value) <= 0) {
+            setStatus("Minimum contribution must be greater than 0");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "max" && value && parseFloat(value) <= 0) {
+            setStatus("Maximum contribution must be greater than 0");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "presaleRate" && value && parseFloat(value) <= 0) {
+            setStatus("Presale rate must be greater than 0");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "listingRate" && value && parseFloat(value) <= 0) {
+            setStatus("Listing rate must be greater than 0");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "liquidityBps" && value) {
+            const bps = parseInt(value);
+            if (
+              bps !== 5000 &&
+              bps !== 6000 &&
+              bps !== 7000 &&
+              bps !== 8000 &&
+              bps !== 9000 &&
+              bps !== 10000
+            ) {
+              setStatus(
+                "Liquidity BPS must be 5000, 6000, 7000, 8000, 9000, or 10000"
+              );
+              setTokenDeposit("0");
+              return;
+            }
+          }
+          if (
+            name === "slippageBps" &&
+            value &&
+            (parseInt(value) < 0 || parseInt(value) > 10000)
+          ) {
+            setStatus("Slippage BPS must be between 0 and 10000");
+            setTokenDeposit("0");
+            return;
+          }
+          if (name === "lockupDuration" && value && parseInt(value) < 0) {
+            setStatus("Lockup duration must be non-negative");
+            setTokenDeposit("0");
+            return;
+          }
+          if (
+            name === "vestingPercentage" &&
+            value &&
+            (parseInt(value) < 0 || parseInt(value) > 10000)
+          ) {
+            setStatus("Vesting percentage must be between 0 and 10000");
+            setTokenDeposit("0");
+            return;
+          }
+          if (
+            name === "vestingDuration" &&
+            value &&
+            parseInt(value) <= 0 &&
+            parseInt(newFormData.vestingPercentage) > 0
+          ) {
+            setStatus(
+              "Vesting duration must be greater than 0 if vesting percentage is set"
+            );
+            setTokenDeposit("0");
+            return;
+          }
+          if (
+            name === "leftoverTokenOption" &&
+            value &&
+            !["0", "1", "2"].includes(value)
+          ) {
+            setStatus(
+              "Leftover token option must be 0 (return), 1 (burn), or 2 (vest)"
+            );
+            setTokenDeposit("0");
+            return;
+          }
+          if (
+            name === "whitelistType" &&
+            value &&
+            !["0", "1", "2"].includes(value)
+          ) {
+            setStatus(
+              "Whitelist type must be 0 (None), 1 (Merkle), or 2 (NFT)"
+            );
+            setTokenDeposit("0");
+            return;
+          }
+          if (
+            name === "merkleRoot" &&
+            value &&
+            newFormData.whitelistType === "1" &&
+            !ethers.utils.isHexString(value, 32)
+          ) {
+            setStatus("Invalid Merkle root");
+            setTokenDeposit("0");
+            return;
+          }
+          if (
+            name === "nftContractAddress" &&
+            value &&
+            newFormData.whitelistType === "2" &&
+            !isValidAddress(value)
+          ) {
+            setStatus("Invalid NFT contract address");
+            setTokenDeposit("0");
+            return;
+          }
+
+          // Calculate tokenDeposit
+          if (
+            newFormData.tokenAddress &&
+            isValidAddress(newFormData.tokenAddress) &&
+            newFormData.hardCap &&
+            parseFloat(newFormData.hardCap) > 0 &&
+            newFormData.presaleRate &&
+            parseFloat(newFormData.presaleRate) > 0 &&
+            newFormData.listingRate &&
+            parseFloat(newFormData.listingRate) > 0 &&
+            newFormData.liquidityBps &&
+            [5000, 6000, 7000, 8000, 9000, 10000].includes(
+              parseInt(newFormData.liquidityBps)
+            )
+          ) {
+            try {
+              const isValidToken = await validateContractAddress(
+                newFormData.tokenAddress,
+                "token"
+              );
+              const isValidCurrency = await validateContractAddress(
+                newFormData.currencyAddress,
+                "currency"
+              );
+              if (!isValidToken || !isValidCurrency) {
+                setTokenDeposit("0");
+                return;
+              }
+
+              const tokenContract = new ethers.Contract(
+                newFormData.tokenAddress,
+                erc20Abi,
+                provider
+              );
+              const decimals = await tokenContract.decimals();
+              setTokenDecimals(decimals);
+
+              const factoryContract = new ethers.Contract(
+                FACTORY_ADDRESS,
+                factoryAbi,
+                provider
+              );
+              const options = {
+                tokenDeposit: 0,
+                hardCap: ethers.utils.parseEther(newFormData.hardCap || "0"),
+                softCap: ethers.utils.parseEther(newFormData.softCap || "0"),
+                min: ethers.utils.parseEther(newFormData.min || "0"),
+                max: ethers.utils.parseEther(newFormData.max || "0"),
+                presaleRate: ethers.BigNumber.from(
+                  Math.floor(parseFloat(newFormData.presaleRate))
+                ),
+                listingRate: ethers.BigNumber.from(
+                  Math.floor(parseFloat(newFormData.listingRate))
+                ),
+                liquidityBps: parseInt(newFormData.liquidityBps || "0"),
+                slippageBps: parseInt(newFormData.slippageBps || "0"),
+                start: newFormData.start
+                  ? Math.floor(new Date(newFormData.start).getTime() / 1000)
+                  : 0,
+                end: newFormData.end
+                  ? Math.floor(new Date(newFormData.end).getTime() / 1000)
+                  : 0,
+                lockupDuration: parseInt(newFormData.lockupDuration || "0"),
+                vestingPercentage: parseInt(
+                  newFormData.vestingPercentage || "0"
+                ),
+                vestingDuration: parseInt(newFormData.vestingDuration || "0"),
+                leftoverTokenOption: parseInt(
+                  newFormData.leftoverTokenOption || "0"
+                ),
+                currency:
+                  newFormData.currencyAddress || ethers.constants.AddressZero,
+                whitelistType: parseInt(newFormData.whitelistType || "0"),
+                merkleRoot: newFormData.merkleRoot || ethers.constants.HashZero,
+                nftContractAddress:
+                  newFormData.nftContractAddress ||
+                  ethers.constants.AddressZero,
+              };
+              const totalTokens =
+                await factoryContract.calculateTotalTokensNeededForPresale(
+                  options,
+                  newFormData.tokenAddress
+                );
+              console.log("Raw totalTokens (Wei):", totalTokens.toString());
+              const formattedTokens = ethers.utils
+                .formatUnits(totalTokens, decimals)
+                .split(".")[0];
+              console.log("Formatted tokenDeposit:", formattedTokens);
+              setTokenDeposit(formattedTokens);
+              setStatus(`Token deposit calculated (Decimals: ${decimals})`);
+              const balance = await tokenContract.balanceOf(account);
+              const formattedBalance = ethers.utils
+                .formatUnits(balance, decimals)
+                .split(".")[0];
+              if (parseInt(formattedTokens) > parseInt(formattedBalance)) {
+                setStatus(
+                  `Insufficient balance: Need ${formattedTokens}, have ${formattedBalance}`
+                );
+              }
+            } catch (error) {
+              console.error("Error calculating token deposit:", error);
+              setTokenDeposit("0");
+              setStatus(
+                "Error calculating token deposit: Invalid token or inputs"
+              );
+            }
+          } else {
+            setTokenDeposit("0");
+          }
+        };
+
+        // Approve token for factory
+        const approveToken = async () => {
+          if (!signer || !formData.tokenAddress || tokenDeposit === "0") {
+            setStatus(
+              "Please connect wallet, enter valid token address, and calculate token deposit"
+            );
+            return;
+          }
+          try {
+            const tokenContract = new ethers.Contract(
+              formData.tokenAddress,
+              erc20Abi,
+              signer
+            );
+            const decimals = await tokenContract.decimals();
+            const balance = await tokenContract.balanceOf(account);
+            const formattedBalance = ethers.utils
+              .formatUnits(balance, decimals)
+              .split(".")[0];
+            if (parseInt(formattedBalance) < parseInt(tokenDeposit)) {
+              setStatus(
+                `Insufficient balance: Need ${tokenDeposit}, have ${formattedBalance}`
+              );
+              return;
+            }
+            const amount = ethers.utils.parseUnits(tokenDeposit, decimals);
+            const allowance = await tokenContract.allowance(
+              account,
+              FACTORY_ADDRESS
+            );
+            if (allowance.lt(amount)) {
+              setStatus("Approving token...");
+              const tx = await tokenContract.approve(FACTORY_ADDRESS, amount);
+              await tx.wait();
+              setStatus("Token approved!");
+            } else {
+              setStatus("Token already approved");
+            }
+          } catch (error) {
+            console.error("Error approving token:", error);
+            setStatus(`Error: ${error.message}`);
+          }
+        };
+
+        // Approve fee token (if ERC20)
+        const approveFeeToken = async () => {
+          if (!signer || feeToken === ethers.constants.AddressZero) {
+            setStatus("No fee token approval needed (ETH fee)");
+            return;
+          }
+          try {
+            const feeTokenContract = new ethers.Contract(
+              feeToken,
+              erc20Abi,
+              signer
+            );
+            const decimals = await feeTokenContract.decimals();
+            const amount = ethers.utils.parseUnits(creationFee, decimals);
+            const allowance = await feeTokenContract.allowance(
+              account,
+              FACTORY_ADDRESS
+            );
+            if (allowance.lt(amount)) {
+              setStatus("Approving fee token...");
+              const tx = await feeTokenContract.approve(
+                FACTORY_ADDRESS,
+                amount
+              );
+              await tx.wait();
+              setStatus("Fee token approved!");
+            } else {
+              setStatus("Fee token already approved");
+            }
+          } catch (error) {
+            console.error("Error approving fee token:", error);
+            setStatus(`Error: ${error.message}`);
+          }
+        };
+
+        // Create presale
+        const createPresale = async () => {
+          if (!signer) {
+            setStatus("Please connect wallet");
+            return;
+          }
+
+          // Validation
+          if (
+            !formData.tokenAddress ||
+            !isValidAddress(formData.tokenAddress)
+          ) {
+            setStatus("Invalid token address");
+            return;
+          }
+          if (
+            formData.currencyAddress &&
+            !isValidAddress(formData.currencyAddress)
+          ) {
+            setStatus("Invalid currency address");
+            return;
+          }
+          if (
+            !formData.start ||
+            !formData.end ||
+            new Date(formData.start) >= new Date(formData.end)
+          ) {
+            setStatus("Invalid start/end times");
+            return;
+          }
+          if (!formData.hardCap || parseFloat(formData.hardCap) <= 0) {
+            setStatus("Hard cap must be greater than 0");
+            return;
+          }
+          if (
+            !formData.softCap ||
+            parseFloat(formData.softCap) <= 0 ||
+            parseFloat(formData.softCap) > parseFloat(formData.hardCap)
+          ) {
+            setStatus(
+              "Soft cap must be greater than 0 and less than or equal to hard cap"
+            );
+            return;
+          }
+          if (!formData.min || parseFloat(formData.min) <= 0) {
+            setStatus("Minimum contribution must be greater than 0");
+            return;
+          }
+          if (
+            !formData.max ||
+            parseFloat(formData.max) <= 0 ||
+            parseFloat(formData.max) < parseFloat(formData.min) ||
+            parseFloat(formData.max) > parseFloat(formData.hardCap)
+          ) {
+            setStatus(
+              "Maximum contribution must be greater than min and less than or equal to hard cap"
+            );
+            return;
+          }
+          if (!formData.presaleRate || parseFloat(formData.presaleRate) <= 0) {
+            setStatus("Presale rate must be greater than 0");
+            return;
+          }
+          if (
+            !formData.listingRate ||
+            parseFloat(formData.listingRate) <= 0 ||
+            parseFloat(formData.listingRate) >= parseFloat(formData.presaleRate)
+          ) {
+            setStatus(
+              "Listing rate must be greater than 0 and less than presale rate"
+            );
+            return;
+          }
+          if (
+            !formData.liquidityBps ||
+            ![5000, 6000, 7000, 8000, 9000, 10000].includes(
+              parseInt(formData.liquidityBps)
+            )
+          ) {
+            setStatus(
+              "Liquidity BPS must be 5000, 6000, 7000, 8000, 9000, or 10000"
+            );
+            return;
+          }
+          if (
+            !formData.slippageBps ||
+            parseInt(formData.slippageBps) < 0 ||
+            parseInt(formData.slippageBps) > 10000
+          ) {
+            setStatus("Slippage BPS must be between 0 and 10000");
+            return;
+          }
+          if (
+            !formData.lockupDuration ||
+            parseInt(formData.lockupDuration) < 0
+          ) {
+            setStatus("Lockup duration must be non-negative");
+            return;
+          }
+          if (
+            !formData.vestingPercentage ||
+            parseInt(formData.vestingPercentage) < 0 ||
+            parseInt(formData.vestingPercentage) > 10000
+          ) {
+            setStatus("Vesting percentage must be between 0 and 10000");
+            return;
+          }
+          if (
+            parseInt(formData.vestingPercentage) > 0 &&
+            (!formData.vestingDuration ||
+              parseInt(formData.vestingDuration) <= 0)
+          ) {
+            setStatus(
+              "Vesting duration must be greater than 0 if vesting percentage is set"
+            );
+            return;
+          }
+          if (!["0", "1", "2"].includes(formData.leftoverTokenOption)) {
+            setStatus(
+              "Leftover token option must be 0 (return), 1 (burn), or 2 (vest)"
+            );
+            return;
+          }
+          if (!["0", "1", "2"].includes(formData.whitelistType)) {
+            setStatus(
+              "Whitelist type must be 0 (None), 1 (Merkle), or 2 (NFT)"
+            );
+            return;
+          }
+          if (
+            formData.whitelistType === "1" &&
+            (!formData.merkleRoot ||
+              !ethers.utils.isHexString(formData.merkleRoot, 32))
+          ) {
+            setStatus("Merkle root required for Merkle whitelist");
+            return;
+          }
+          if (
+            formData.whitelistType === "2" &&
+            (!formData.nftContractAddress ||
+              !isValidAddress(formData.nftContractAddress))
+          ) {
+            setStatus("NFT contract address required for NFT whitelist");
+            return;
+          }
+          if (tokenDeposit === "0") {
+            setStatus("Please calculate token deposit first");
+            return;
+          }
+
+          try {
+            const tokenContract = new ethers.Contract(
+              formData.tokenAddress,
+              erc20Abi,
+              signer
+            );
+            const decimals = await tokenContract.decimals();
+            const balance = await tokenContract.balanceOf(account);
+            const formattedBalance = ethers.utils
+              .formatUnits(balance, decimals)
+              .split(".")[0];
+            if (parseInt(formattedBalance) < parseInt(tokenDeposit)) {
+              setStatus(
+                `Insufficient balance: Need ${tokenDeposit}, have ${formattedBalance}`
+              );
+              return;
+            }
+            const amount = ethers.utils.parseUnits(tokenDeposit, decimals);
+            const allowance = await tokenContract.allowance(
+              account,
+              FACTORY_ADDRESS
+            );
+            if (allowance.lt(amount)) {
+              setStatus("Please approve presale token first");
+              return;
+            }
+          } catch (error) {
+            console.error("Error checking balance/allowance:", error);
+            setStatus("Error checking token balance or allowance");
+            return;
+          }
+
+          try {
+            const factoryContract = new ethers.Contract(
+              FACTORY_ADDRESS,
+              factoryAbi,
+              signer
+            );
+            const tokenContract = new ethers.Contract(
+              formData.tokenAddress,
+              erc20Abi,
+              signer
+            );
+            const decimals = await tokenContract.decimals();
+            const options = {
+              tokenDeposit: ethers.utils.parseUnits(tokenDeposit, decimals),
+              hardCap: ethers.utils.parseEther(formData.hardCap),
+              softCap: ethers.utils.parseEther(formData.softCap),
+              min: ethers.utils.parseEther(formData.min),
+              max: ethers.utils.parseEther(formData.max),
+              presaleRate: ethers.BigNumber.from(
+                Math.floor(parseFloat(formData.presaleRate))
+              ),
+              listingRate: ethers.BigNumber.from(
+                Math.floor(parseFloat(formData.listingRate))
+              ),
+              liquidityBps: parseInt(formData.liquidityBps),
+              slippageBps: parseInt(formData.slippageBps),
+              start: Math.floor(new Date(formData.start).getTime() / 1000),
+              end: Math.floor(new Date(formData.end).getTime() / 1000),
+              lockupDuration: parseInt(formData.lockupDuration),
+              vestingPercentage: parseInt(formData.vestingPercentage),
+              vestingDuration: parseInt(formData.vestingDuration),
+              leftoverTokenOption: parseInt(formData.leftoverTokenOption),
+              currency:
+                formData.currencyAddress || ethers.constants.AddressZero,
+              whitelistType: parseInt(formData.whitelistType),
+              merkleRoot: formData.merkleRoot || ethers.constants.HashZero,
+              nftContractAddress:
+                formData.nftContractAddress || ethers.constants.AddressZero,
+            };
+            console.log(
+              "CreatePresale options:",
+              JSON.stringify(options, (key, value) =>
+                typeof value === "object" && value.type === "BigNumber"
+                  ? value.toString()
+                  : value
+              )
+            );
+
+            setStatus("Creating presale...");
+            let tx;
+            if (feeToken === ethers.constants.AddressZero) {
+              try {
+                const gasEstimate =
+                  await factoryContract.estimateGas.createPresale(
+                    options,
+                    formData.tokenAddress,
+                    WETH_ADDRESS,
+                    UNISWAP_V2_ROUTER,
+                    { value: ethers.utils.parseEther(creationFee) }
+                  );
+                console.log("Estimated gas:", gasEstimate.toString());
+                tx = await factoryContract.createPresale(
+                  options,
+                  formData.tokenAddress,
+                  WETH_ADDRESS,
+                  UNISWAP_V2_ROUTER,
+                  {
+                    value: ethers.utils.parseEther(creationFee),
+                    gasLimit: gasEstimate.mul(120).div(100),
+                  }
+                );
+              } catch (gasError) {
+                console.error("Gas estimation failed:", gasError);
+                setStatus(
+                  "Gas estimation failed. Trying with manual gas limit..."
+                );
+                tx = await factoryContract.createPresale(
+                  options,
+                  formData.tokenAddress,
+                  WETH_ADDRESS,
+                  UNISWAP_V2_ROUTER,
+                  {
+                    value: ethers.utils.parseEther(creationFee),
+                    gasLimit: 5000000,
+                  }
+                );
+              }
+            } else {
+              const feeTokenContract = new ethers.Contract(
+                feeToken,
+                erc20Abi,
+                signer
+              );
+              const feeDecimals = await feeTokenContract.decimals();
+              const feeAmount = ethers.utils.parseUnits(
+                creationFee,
+                feeDecimals
+              );
+              const feeAllowance = await feeTokenContract.allowance(
+                account,
+                FACTORY_ADDRESS
+              );
+              if (feeAllowance.lt(feeAmount)) {
+                setStatus("Please approve fee token first");
+                return;
+              }
+              try {
+                const gasEstimate =
+                  await factoryContract.estimateGas.createPresale(
+                    options,
+                    formData.tokenAddress,
+                    WETH_ADDRESS,
+                    UNISWAP_V2_ROUTER
+                  );
+                console.log("Estimated gas:", gasEstimate.toString());
+                tx = await factoryContract.createPresale(
+                  options,
+                  formData.tokenAddress,
+                  WETH_ADDRESS,
+                  UNISWAP_V2_ROUTER,
+                  { gasLimit: gasEstimate.mul(120).div(100) }
+                );
+              } catch (gasError) {
+                console.error("Gas estimation failed:", gasError);
+                setStatus(
+                  "Gas estimation failed. Trying with manual gas limit..."
+                );
+                tx = await factoryContract.createPresale(
+                  options,
+                  formData.tokenAddress,
+                  WETH_ADDRESS,
+                  UNISWAP_V2_ROUTER,
+                  { gasLimit: 5000000 }
+                );
+              }
+            }
+            await tx.wait();
+            setStatus(`Presale created! Tx: ${tx.hash}`);
+          } catch (error) {
+            console.error("Error creating presale:", error);
+            setStatus(`Error: ${error.message}`);
+            if (error.data) {
+              console.log("Revert data:", error.data);
+            }
+          }
+        };
+
+        return (
+          <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-lg">
+              <h1 className="text-2xl font-bold mb-4 text-center">
+                Create Presale
+              </h1>
+              {!account ? (
+                <button
+                  className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 mb-4"
+                  onClick={connectWallet}
+                >
+                  Connect Wallet
+                </button>
+              ) : (
+                <p className="text-green-600 mb-4">{status}</p>
+              )}
+              {account && (
+                <div className="space-y-4">
+                  <input
+                    type="text"
+                    name="tokenAddress"
+                    placeholder="Token Address"
+                    value={formData.tokenAddress}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="text"
+                    name="currencyAddress"
+                    placeholder="Currency Address (leave empty for ETH)"
+                    value={formData.currencyAddress}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="datetime-local"
+                    name="start"
+                    placeholder="Start Time"
+                    value={formData.start}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="datetime-local"
+                    name="end"
+                    value={formData.end}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="hardCap"
+                    placeholder="Hard Cap (in ETH)"
+                    value={formData.hardCap}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="softCap"
+                    placeholder="Soft Cap (in ETH)"
+                    value={formData.softCap}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="min"
+                    placeholder="Min Contribution (in ETH)"
+                    value={formData.min}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="max"
+                    placeholder="Max Contribution (in ETH)"
+                    value={formData.max}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="presaleRate"
+                    placeholder="Presale Rate (tokens per ETH)"
+                    value={formData.presaleRate}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="listingRate"
+                    placeholder="Listing Rate (tokens per ETH)"
+                    value={formData.listingRate}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <select
+                    name="liquidityBps"
+                    value={formData.liquidityBps}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="">Select Liquidity BPS</option>
+                    <option value="5000">50%</option>
+                    <option value="6000">60%</option>
+                    <option value="7000">70%</option>
+                    <option value="8000">80%</option>
+                    <option value="9000">90%</option>
+                    <option value="10000">100%</option>
+                  </select>
+                  <input
+                    type="number"
+                    name="slippageBps"
+                    placeholder="Slippage BPS (0-10000)"
+                    value={formData.slippageBps}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="lockupDuration"
+                    placeholder="Lockup Duration (seconds)"
+                    value={formData.lockupDuration}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="vestingPercentage"
+                    placeholder="Vesting Percentage (0-10000)"
+                    value={formData.vestingPercentage}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    name="vestingDuration"
+                    placeholder="Vesting Duration (seconds)"
+                    value={formData.vestingDuration}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  />
+                  <select
+                    name="leftoverTokenOption"
+                    value={formData.leftoverTokenOption}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="0">Return to Owner</option>
+                    <option value="1">Burn</option>
+                    <option value="2">Vest</option>
+                  </select>
+                  <select
+                    name="whitelistType"
+                    value={formData.whitelistType}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="0">None</option>
+                    <option value="1">Merkle</option>
+                    <option value="2">NFT</option>
+                  </select>
+                  {formData.whitelistType === "1" && (
+                    <input
+                      type="text"
+                      name="merkleRoot"
+                      placeholder="Merkle Root (hex)"
+                      value={formData.merkleRoot}
+                      onChange={handleInputChange}
+                      className="w-full p-2 border rounded"
+                    />
+                  )}
+                  {formData.whitelistType === "2" && (
+                    <input
+                      type="text"
+                      name="nftContractAddress"
+                      placeholder="NFT Contract Address"
+                      value={formData.nftContractAddress}
+                      onChange={handleInputChange}
+                      className="w-full p-2 border rounded"
+                    />
+                  )}
+                  <p className="text-sm text-gray-600">
+                    Tokens to Deposit: {tokenDeposit} (Decimals: {tokenDecimals}
+                    )
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Token Balance: {tokenBalance}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Creation Fee: {creationFee}{" "}
+                    {feeToken === ethers.constants.AddressZero
+                      ? "ETH"
+                      : "Token"}
+                  </p>
+                  <button
+                    className="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 mb-2"
+                    onClick={checkTokenBalance}
+                  >
+                    Check Token Balance
+                  </button>
+                  <button
+                    className="w-full bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600 mb-2"
+                    onClick={approveFeeToken}
+                  >
+                    Approve Fee Token
+                  </button>
+                  <button
+                    className="w-full bg-yellow-500 text-white py-2 rounded hover:bg-yellow-600 mb-2"
+                    onClick={approveToken}
+                  >
+                    Approve Presale Token
+                  </button>
+                  <button
+                    className="w-full bg-green-500 text-white py-2 rounded hover:bg-green-600"
+                    onClick={createPresale}
+                  >
+                    Create Presale
+                  </button>
+                  {status && (
+                    <p className="text-sm text-gray-600 mt-2">{status}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      ReactDOM.render(<App />, document.getElementById("root"));
+    </script>
+  </body>
+</html>
