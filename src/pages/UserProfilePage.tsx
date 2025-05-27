@@ -489,11 +489,11 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
 
     const presaleStatus: PresaleStatusReturn = (options !== undefined && state !== undefined) ? getPresaleStatus(state, options) : { text: "Loading...", variant: "default" };
 
-    const canClaim = (state === 2 || state === 4) && userContributionRaw !== undefined && userContributionRaw > 0n && 
-                     (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw < userContributionRaw : true);
+    const canClaim = state === 3 && userContributionRaw !== undefined && userContributionRaw > 0n && 
+                     (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw < userContributionRaw : true); // Updated: Claim only possible in State 3 (Finalized/Success)
 
-    const canRefund = state === 3 && userContributionRaw !== undefined && userContributionRaw > 0n && 
-                      (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw === 0n : true);
+    const canRefund = state === 2 && userContributionRaw !== undefined && userContributionRaw > 0n && 
+                      (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw === 0n : true); // Updated: Refund only possible in State 2 (Canceled/Failed)
 
     useEffect(() => {
         if (isConfirmed && receipt) {
