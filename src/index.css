@@ -5,6 +5,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  font-size: 70%
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%; /* White */
