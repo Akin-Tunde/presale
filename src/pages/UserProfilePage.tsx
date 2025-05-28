@@ -14,7 +14,7 @@ import { type Abi, encodeFunctionData, type Address, formatUnits, isHex, zeroAdd
 import PresaleFactoryJson from "@/abis/PresaleFactory.json";
 import PresaleJson from "@/abis/Presale.json";
 import VestingJson from "@/abis/Vesting.json";
-import { getPresaleStatus, cn, type PresaleStatusReturn, formatTokenAmount, formatCurrencyDisplay } from "@/lib/utils";
+import { getPresaleStatus, cn, type PresaleStatusReturn, formatTokenAmount } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 
@@ -25,7 +25,7 @@ const factoryAbi = PresaleFactoryJson.abi as Abi;
 const presaleAbi = PresaleJson.abi as Abi;
 const vestingAbi = VestingJson.abi as Abi;
 const factoryAddress = import.meta.env.VITE_PRESALE_FACTORY_ADDRESS as Address;
-const vestingAddress = import.meta.env.VITE_VESTING_CONTRACT_ADDRESS as Address || "0x1234567890123456789012345678901234567890" as Address; // Fallback address, should be replaced with actual address
+const vestingAddress = import.meta.env.VITE_VESTING_CONTRACT_ADDRESS as Address;// Fallback address, should be replaced with actual address
 
 const ensureString = (value: any, fallback: string = "N/A"): string => {
     if (typeof value === "string") return value;
@@ -646,6 +646,7 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
 
 const UserProfilePage = () => {
     const { address, isConnected } = useAccount();
+    const { writeContractAsync } = useWriteContract();
     const [vestingSchedules, setVestingSchedules] = useState<any[]>([]);
     const [isLoadingVestingSchedules, setIsLoadingVestingSchedules] = useState<boolean>(false);
     const [vestingClaimError, setVestingClaimError] = useState<string | null>(null);
@@ -771,7 +772,7 @@ const UserProfilePage = () => {
             ]);
             
             // Process results into vesting schedules
-            const processedSchedules = scheduleResults.map((result, index) => {
+            const processedSchedules = scheduleResults.map((result: any, index: number) => {
                 if (result.status !== "success" || !result.result) return null;
                 
                 const schedule = result.result;
@@ -803,7 +804,7 @@ const UserProfilePage = () => {
             }).filter(Boolean);
             
             // Fetch token symbols and decimals for each schedule
-            const tokenInfoPromises = processedSchedules.map(async (schedule) => {
+            const tokenInfoPromises = processedSchedules.map(async (schedule: any) => {
                 if (!schedule || !schedule.tokenAddress) return schedule;
                 
                 try {
