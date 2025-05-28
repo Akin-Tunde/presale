@@ -101,6 +101,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
             { ...presaleContract, functionName: "getTotalContributed" },
             { ...presaleContract, functionName: "owner" },
             { ...presaleContract, functionName: "token" }, // Added to fetch the presale token address
+            { ...presaleContract, functionName: "ownerBalance" }, // Fetch ownerBalance
         ],
     });
 
@@ -114,6 +115,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
     const whitelistEnabledCallResult = presaleDetailsResults?.[3];
     const totalContributedCallResult = presaleDetailsResults?.[4];
     const tokenAddressCallResult = presaleDetailsResults?.[6]; // Index for token() call
+    const ownerBalanceCallResult = presaleDetailsResults?.[7]; // Index for ownerBalance() call
 
     const options = optionsResult?.status === "success" ? optionsResult.result as any[] : undefined;
     currentPresaleOptionsForTimestampContext = { state: stateCallResult?.status === "success" ? stateCallResult.result : undefined };
@@ -121,6 +123,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
     const state = stateCallResult?.status === "success" ? stateCallResult.result as number : undefined;
     const paused = pausedCallResult?.status === "success" ? pausedCallResult.result as boolean : undefined;
     const whitelistEnabled = whitelistEnabledCallResult?.status === "success" ? whitelistEnabledCallResult.result as boolean : undefined;
+    const ownerBalance = ownerBalanceCallResult?.status === "success" ? ownerBalanceCallResult.result as bigint : undefined;
    
     const presaleTokenAddress = tokenAddressCallResult?.status === "success" ? tokenAddressCallResult.result as Address : undefined;
 
@@ -188,10 +191,10 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
 
     const canCancel = isOwner && presaleDataAvailable && (state === 0 || (state === 1 && totalContributed !== undefined && softCap !== undefined && totalContributed < softCap));
 
-    const canWithdraw = isOwner && presaleDataAvailable && (state === 2 || state === 3 || state === 4);
+    const canWithdraw = isOwner && presaleDataAvailable && (state === 2 || state === 3) && ownerBalance !== undefined && ownerBalance > 0n; // Updated: Withdraw only possible in State 2 or 3 AND if ownerBalance > 0
     const canPauseUnpause = isOwner && presaleDataAvailable && state === 1;
     const canToggleWhitelist = isOwner && presaleDataAvailable && state === 0;
-    const canExtendClaim = isOwner && presaleDataAvailable && state === 2;
+    const canExtendClaim = isOwner && presaleDataAvailable && state === 3; // Updated: Extend Claim only possible in State 3 (Finalized/Success)
 
     const { data: finalizeGas } = useEstimateGas({ to: presaleAddress, data: encodeFunctionData({ abi: presaleAbi, functionName: "finalize", args: [] }), account: userAddress, query: { enabled: !!userAddress && canFinalize } });
     
@@ -351,6 +354,11 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
                     <Button size="sm" variant="outline" onClick={() => handleCreatorAction("finalize", [], "Finalize")} disabled={!canFinalize || isWritePending || isConfirming}>Finalize <EstimatedFeeDisplay fee={calculateFee(finalizeGas)} /></Button>
                     <Button size="sm" variant="outline" onClick={() => handleCreatorAction("cancel", [], "Cancel")} disabled={!canCancel || isWritePending || isConfirming}>Cancel <EstimatedFeeDisplay fee={calculateFee(cancelGas)} /></Button>
                     <Button size="sm" variant="outline" onClick={() => handleCreatorAction("withdraw", [], "Withdraw")} disabled={!canWithdraw || isWritePending || isConfirming}>Withdraw <EstimatedFeeDisplay fee={calculateFee(withdrawGas)} /></Button>
+                    {canWithdraw && ownerBalance !== undefined && ownerBalance > 0n && (
+                        <p className="text-xs text-muted-foreground self-center ml-2">
+                            Withdrawable: {formatCurrencyDisplay(ownerBalance, paymentDecimalsToUse, paymentSymbolToUse)}
+                        </p>
+                    )}
                     {paused ? (
                         <Button size="sm" variant="outline" onClick={() => handleCreatorAction("unpause", [], "Unpause")} disabled={!canPauseUnpause || isWritePending || isConfirming}>Unpause <EstimatedFeeDisplay fee={calculateFee(unpauseGas)} /></Button>
                     ) : (
@@ -489,11 +497,11 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
 
     const presaleStatus: PresaleStatusReturn = (options !== undefined && state !== undefined) ? getPresaleStatus(state, options) : { text: "Loading...", variant: "default" };
 
-    const canClaim = (state === 2 || state === 4) && userContributionRaw !== undefined && userContributionRaw > 0n && 
-                     (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw < userContributionRaw : true);
+    const canClaim = state === 3 && userContributionRaw !== undefined && userContributionRaw > 0n && 
+                     (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw < userContributionRaw : true); // Updated: Claim only possible in State 3 (Finalized/Success)
 
-    const canRefund = state === 3 && userContributionRaw !== undefined && userContributionRaw > 0n && 
-                      (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw === 0n : true);
+    const canRefund = state === 2 && userContributionRaw !== undefined && userContributionRaw > 0n && 
+                      (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw === 0n : true); // Updated: Refund only possible in State 2 (Canceled/Failed)
 
     useEffect(() => {
         if (isConfirmed && receipt) {

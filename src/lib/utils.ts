@@ -25,12 +25,11 @@ export const getPresaleStatus = (state: number | undefined, options: any): Presa
       if (startTime && now < startTime) return { text: "Upcoming", variant: "default" };
       if (endTime && now > endTime) return { text: "Ended (Processing)", variant: "outline" }; 
       return { text: "Active", variant: "default" };
-    case 2: // Success
+    case 2: // Canceled (Failed) - As per Presale.sol enum
+      return { text: "Canceled (Failed)", variant: "destructive" };
+    case 3: // Finalized (Success) - As per Presale.sol enum
       return { text: "Ended (Success)", variant: "default" };
-    case 3: // Failure
-      return { text: "Ended (Failed)", variant: "destructive" };
-    case 4: // Canceled
-      return { text: "Canceled", variant: "destructive" };
+    // Case 4 removed as it's not defined in Presale.sol enum
     default:
       return { text: "Unknown", variant: "secondary" };
   }
