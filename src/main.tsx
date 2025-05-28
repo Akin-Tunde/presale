@@ -1,44 +1,45 @@
-import React, { useEffect } from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-import './index.css';
-import { HashRouter } from 'react-router-dom';
-import { WagmiProvider } from 'wagmi';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { config } from './lib/wagmiConfig';
-import { ThemeProvider } from "./components/theme-provider"; // Import ThemeProvider
-import { Toaster } from "@/components/ui/sonner";
-import FrameSDK from '@farcaster/frame-sdk';
-
+import React, { useEffect } from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App.tsx";
+import "./index.css";
+import { HashRouter } from "react-router-dom";
+import { WagmiProvider } from "wagmi";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"; // Import ThemeProvider
+import { config } from "./lib/wagmiConfig";
+import { ThemeProvider } from "./components/theme-provider";
+// import { Toaster } from "@/components/ui/sonner"; // Toaster is now only in App.tsx
+import { sdk as FrameSDK } from "@farcaster/frame-sdk"; // Changed import to named import 'sdk' and aliased
 
 function FarcasterFrameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
-  const init = async () => {
-      FrameSDK.actions.ready();
+    const init = async () => {
+      // Consider if this is the best place/time to call ready().
+      // Farcaster docs recommend calling it when your UI is truly ready to avoid jitter.
+      await FrameSDK.actions.ready(); // Use await and the imported sdk
     };
-
     init();
   }, []);
 
   return <>{children}</>;
- }
+}
 
 const queryClient = new QueryClient();
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
+ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <HashRouter>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
-              <FarcasterFrameProvider>
-          <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme"> {/* Wrap with ThemeProvider */}
-            <App />
-            <Toaster />
-          </ThemeProvider>
-              </FarcasterFrameProvider>
+          <FarcasterFrameProvider>
+            <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+              {" "}
+              {/* Wrap with ThemeProvider */}
+              <App />{" "}
+              {/* Toaster component removed from here, App.tsx has its own */}
+            </ThemeProvider>
+          </FarcasterFrameProvider>
         </QueryClientProvider>
       </WagmiProvider>
     </HashRouter>
-  </React.StrictMode>,
+  </React.StrictMode>
 );
-
