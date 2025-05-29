@@ -14,3 +14,10 @@
 Thumbs.db
 .idea/
 .vscode/
+
+
+#Dotenv
+
+# dotenv files
+.env
+.env.local

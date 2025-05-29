@@ -89,7 +89,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     className="w-10 h-10 object-contain"
                   />
                 </div>
-                ilon
                 <div className="absolute inset-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 opacity-0 group-hover:opacity-40 blur-xl transition-all duration-500 scale-110" />
               </div>
               <div className="flex flex-col">
@@ -317,7 +316,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         </div>
       </header>
 
-      <main className="flex-1 container max-w-screen-2xl py-16 relative z-10">
+      <main className="flex-1 container max-w-screen-2xl relative z-10">
         {children || <Outlet />}
       </main>
 
