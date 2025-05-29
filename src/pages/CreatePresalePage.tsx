@@ -7,18 +7,9 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { parseEther, parseUnits, isAddress, zeroAddress, zeroHash } from "viem";
-// import { sepolia } from "viem/chains"; ///
-// import { createConfig, http } from "@wagmi/core"; ///
 import { getPublicClient } from "@wagmi/core";
 import { supabase } from "@/lib/supabase";
-// import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
-import { config } from "@/lib/wagmiConfig"; // Adjust the import path as needed
-
-// Wagmi configuration
-// const config = createConfig({
-//   chains: [sepolia],
-//   transports: { [sepolia.id]: http() },
-// });
+import { config } from "@/lib/wagmiConfig";
 
 // ABIs
 const factoryAbi = [
@@ -107,11 +98,106 @@ const factoryAbi = [
     type: "function",
   },
   {
-    name: "ERC20InsufficientBalance",
+    name: "PairAlreadyExists",
+    type: "error",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "currency", type: "address" },
+    ],
+  },
+  {
+    name: "InvalidState",
+    type: "error",
+    inputs: [{ name: "state", type: "uint8" }],
+  },
+  {
+    name: "NotInPurchasePeriod",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "ZeroAmount",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InsufficientTokenDeposit",
+    type: "error",
+    inputs: [
+      { name: "deposited", type: "uint256" },
+      { name: "needed", type: "uint256" },
+    ],
+  },
+  {
+    name: "InvalidInitialization",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidLeftoverTokenOption",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidHouseConfiguration",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidCapSettings",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidContributionLimits",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidRates",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidTimestamps",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidVestingPercentage",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidMerkleRoot",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidNftContractAddress",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "InvalidLiquidityBps",
+    type: "error",
+    inputs: [],
+  },
+  {
+    name: "ERC20InsufficientBalance", //|ERC20InsufficientAllowance
     type: "error",
     inputs: [
       { name: "sender", type: "address" },
       { name: "balance", type: "uint256" },
+      { name: "needed", type: "uint256" },
+    ],
+  },
+  {
+    name: "ERC20InsufficientAllowance",
+    type: "error",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "allowance", type: "uint256" },
       { name: "needed", type: "uint256" },
     ],
   },
@@ -168,6 +254,15 @@ const erc20Abi = [
       { name: "needed", type: "uint256" },
     ],
   },
+  {
+    name: "ERC20InsufficientAllowance",
+    type: "error",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "allowance", type: "uint256" },
+      { name: "needed", type: "uint256" },
+    ],
+  },
 ];
 
 // Configuration
@@ -188,7 +283,6 @@ const isValidAddress = (address: string): boolean => {
   return address === "" || isAddress(address);
 };
 
-// Helper function to save presale data to Supabase, including image upload
 const savePresaleToSupabase = async (
   presaleFormData: FormDataState,
   creatorAddress: `0x${string}` | undefined,
@@ -200,49 +294,38 @@ const savePresaleToSupabase = async (
 
   let presaleImageUrl: string | undefined = undefined;
 
-  // 1. Handle image upload if presaleImage exists
   if (presaleFormData.presaleImage) {
     const file = presaleFormData.presaleImage;
-    // Sanitize file name to prevent issues with special characters
     const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
     const fileName = `${Date.now()}_${sanitizedFileName}`;
-    // It's common to store public files in a 'public' folder within the bucket
-    // or organize by user/presale ID if applicable.
     const filePath = `public/${fileName}`;
 
     try {
-      console.log(
-        `Attempting to upload ${filePath} to presale-images bucket...`
-      );
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("presale-images") // Make sure 'presale-images' bucket exists in Supabase
+        .from("presale-images")
         .upload(filePath, file, {
-          cacheControl: "3600", // Cache for 1 hour
-          upsert: false, // Set to true if you want to overwrite if file with same name exists
+          cacheControl: "3600",
+          upsert: false,
         });
 
       if (uploadError) {
         console.error("Supabase image upload error:", uploadError);
-        // Decide if this error should prevent metadata saving.
-        // For now, we'll proceed but won't have an image URL.
       } else if (uploadData) {
         const {
           data: { publicUrl },
         } = supabase.storage.from("presale-images").getPublicUrl(filePath);
         presaleImageUrl = publicUrl;
-        console.log("Image uploaded successfully:", presaleImageUrl);
       }
     } catch (e) {
       console.error("Exception during image upload:", e);
     }
   }
 
-  // 2. Prepare data for Supabase table
   const dataToInsert = {
     creator: creatorAddress,
     token_address: presaleFormData.tokenAddress,
     currency_address: presaleFormData.currencyAddress,
-    image_url: presaleImageUrl, // Store the public URL of the uploaded image
+    image_url: presaleImageUrl,
     presale_rate: presaleFormData.presaleRate,
     listing_rate: presaleFormData.listingRate,
     hard_cap: presaleFormData.hardCap,
@@ -266,7 +349,6 @@ const savePresaleToSupabase = async (
     created_at: new Date().toISOString(),
   };
 
-  // 3. Insert into Supabase 'presales' table
   try {
     const { error } = await supabase.from("presales").insert([dataToInsert]);
     if (error) {
@@ -330,7 +412,7 @@ const CreatePresalePage: React.FC = () => {
     minContribution: "0.1",
     maxContribution: "1",
     liquidityBps: "7000",
-    lockupDuration: (1 * 30 * 24 * 60 * 60).toString(), // Default to 1 month in seconds
+    lockupDuration: (1 * 30 * 24 * 60 * 60).toString(),
     start: formatDateForInput(new Date(Date.now() + 5 * 60 * 1000)),
     end: formatDateForInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     claimDelayMinutes: "10",
@@ -360,7 +442,6 @@ const CreatePresalePage: React.FC = () => {
   const [isTokenApproved, setIsTokenApproved] = useState(false);
   const [isFeeApproved, setIsFeeApproved] = useState(false);
 
-  // Fetch factory fee and fee token
   const { data: creationFeeData } = useReadContract({
     address: FACTORY_ADDRESS,
     abi: factoryAbi,
@@ -372,7 +453,6 @@ const CreatePresalePage: React.FC = () => {
     functionName: "feeToken",
   });
 
-  // Fetch token details
   const { data: tokenDecimalsData } = useReadContract({
     address: formData.tokenAddress as `0x${string}`,
     abi: erc20Abi,
@@ -393,7 +473,6 @@ const CreatePresalePage: React.FC = () => {
     query: { enabled: isConnected && isValidAddress(formData.tokenAddress) },
   });
 
-  // Fetch allowances
   const { data: tokenAllowanceData } = useReadContract({
     address: formData.tokenAddress as `0x${string}`,
     abi: erc20Abi,
@@ -414,7 +493,6 @@ const CreatePresalePage: React.FC = () => {
     },
   });
 
-  // Initialize provider and fetch fee details
   useEffect(() => {
     const init = async () => {
       if (!FACTORY_ADDRESS || !isValidAddress(FACTORY_ADDRESS)) {
@@ -448,16 +526,13 @@ const CreatePresalePage: React.FC = () => {
         }
       } catch (error: any) {
         setStatus(
-          `Error fetching fee details: ${
-            error.message || "Unknown error"
-          }. Check console.`
+          `Error fetching fee details: ${error.message || "Unknown error"}.`
         );
       }
     };
     init();
   }, [creationFeeData, feeTokenAddress]);
 
-  // Update token details
   useEffect(() => {
     if (tokenDecimalsData) setTokenDecimals(Number(tokenDecimalsData));
     if (tokenSymbolData) setTokenSymbol(tokenSymbolData as string);
@@ -468,7 +543,6 @@ const CreatePresalePage: React.FC = () => {
     }
   }, [tokenDecimalsData, tokenSymbolData, tokenBalanceData]);
 
-  // Check approvals
   useEffect(() => {
     if (tokenAllowanceData && tokenDeposit !== "0") {
       const requiredAmount = parseUnits(tokenDeposit, tokenDecimals);
@@ -495,7 +569,8 @@ const CreatePresalePage: React.FC = () => {
           setIsFeeApproved(
             Number(feeAllowanceData) >= Number(requiredFeeAmount)
           );
-        });
+        })
+        .catch(() => setIsFeeApproved(false));
     } else if (
       creationFeeTokenAddress === zeroAddress ||
       parseFloat(creationFee) === 0
@@ -511,33 +586,25 @@ const CreatePresalePage: React.FC = () => {
     tokenDecimals,
   ]);
 
-  // Handle transaction receipt
   useEffect(() => {
-    if (receipt && receipt.status === "success") {
-      setStatus(`Presale created successfully! Tx: ${receipt.transactionHash}`);
-
-      // Call the new function to save data to Supabase
-      savePresaleToSupabase(formData, address, receipt.transactionHash)
-        .then((result) => {
-          if (result.success) {
+    if (receipt) {
+      if (receipt.status === "success") {
+        savePresaleToSupabase(formData, address, receipt.transactionHash)
+          .then((result) => {
             setStatus(
-              `${result.message} Tx: ${receipt.transactionHash}${
-                result.imageUrl ? ` Image: ${result.imageUrl}` : ""
-              }`
+              result.success
+                ? `${result.message} Tx: ${receipt.transactionHash}${
+                    result.imageUrl ? ` Image: ${result.imageUrl}` : ""
+                  }`
+                : `Presale created on-chain, but DB save failed: ${result.message}`
             );
-          } else {
-            setStatus(
-              `Presale created on-chain, but DB save failed: ${result.message} Tx: ${receipt.transactionHash}`
-            );
-          }
-        })
-        .catch((error) => {
-          setStatus(
-            `Presale created on-chain, but an unexpected error occurred during DB save: ${error.message}`
+          })
+          .catch((error) =>
+            setStatus(`Presale created, but DB save error: ${error.message}`)
           );
-        });
-    } else if (receipt && receipt.status === "reverted") {
-      setStatus("Transaction failed: Reverted. Check console.");
+      } else {
+        setStatus("Transaction failed: Reverted.");
+      }
     }
   }, [receipt, address, formData]);
 
@@ -565,8 +632,7 @@ const CreatePresalePage: React.FC = () => {
       setTokenDecimals(18);
       setTokenSymbol("");
       setTokenBalance("0");
-      if (tokenAddress)
-        setStatus("Invalid token address for fetching details.");
+      if (tokenAddress) setStatus("Invalid token address.");
       return false;
     }
     return true;
@@ -654,9 +720,7 @@ const CreatePresalePage: React.FC = () => {
     } catch (error: any) {
       setTokenDeposit("0");
       setStatus(
-        `Error calculating token deposit: ${
-          error.message || "Check inputs or console."
-        }`
+        `Error calculating token deposit: ${error.message || "Check inputs."}`
       );
     }
   }, [formData, tokenDecimals, tokenSymbol]);
@@ -673,7 +737,7 @@ const CreatePresalePage: React.FC = () => {
 
     if (name === "lockupDuration" && type === "select-one") {
       const selectedMonths = parseInt(value);
-      const durationInSeconds = selectedMonths * 30 * 24 * 60 * 60; // Assuming 30 days per month
+      const durationInSeconds = selectedMonths * 30 * 24 * 60 * 60;
       newFormData = {
         ...formData,
         lockupDuration: durationInSeconds.toString(),
@@ -746,10 +810,9 @@ const CreatePresalePage: React.FC = () => {
     const endTime = new Date(formData.end).getTime();
 
     if (isNaN(startTime) || isNaN(endTime)) {
-      return "Invalid date format for start or end time. Please ensure they are correctly set.";
+      return "Invalid date format for start or end time.";
     }
 
-    // Start time must be at least (e.g.) 5 minutes in the future
     const minStartDelay = 5 * 60 * 1000;
     if (startTime <= now + minStartDelay) {
       return `Start time must be at least ${
@@ -761,18 +824,18 @@ const CreatePresalePage: React.FC = () => {
       return "End time must be after start time.";
     }
 
-    const minDuration = 1 * 60 * 60 * 1000; // 1 hour
+    const minDuration = 1 * 60 * 60 * 1000;
     if (endTime - startTime < minDuration) {
       return "Presale duration must be at least 1 hour.";
     }
 
-    const maxDuration = 90 * 24 * 60 * 60 * 1000; // 90 days
+    const maxDuration = 90 * 24 * 60 * 60 * 1000;
     if (endTime - startTime > maxDuration) {
       return "Presale duration cannot exceed 90 days.";
     }
-    const maxStartAhead = 180 * 24 * 60 * 60 * 1000; // 180 days
+    const maxStartAhead = 180 * 24 * 60 * 60 * 1000;
     if (startTime > now + maxStartAhead) {
-      return `Start time cannot be scheduled more than 180 days in the future. The provided 2025 dates might be too far out.`;
+      return "Start time cannot be more than 180 days in the future.";
     }
     return null;
   };
@@ -793,7 +856,7 @@ const CreatePresalePage: React.FC = () => {
       !isValidAddress(spenderAddr)
     ) {
       setStatus(
-        `Cannot approve: Invalid parameters or wallet not connected for ${type} approval.`
+        `Invalid parameters or wallet not connected for ${type} approval.`
       );
       return false;
     }
@@ -817,28 +880,34 @@ const CreatePresalePage: React.FC = () => {
         args: [spenderAddr as `0x${string}`, amountInWei],
       });
       setTxHash(hash);
+      setStatus(
+        `Approval transaction sent: ${hash}. Waiting for confirmation...`
+      );
       return true;
     } catch (error: any) {
-      setStatus(
-        `Error approving ${type}: ${
-          error.message || "Unknown error"
-        }. Check console.`
-      );
+      if (error.message.includes("User denied")) {
+        setStatus(`Approval cancelled by user.`);
+      } else if (error.message.includes("ERC20InsufficientBalance")) {
+        setStatus(`Insufficient ${tokenSymbolToUse} balance for approval.`);
+      } else if (error.message.includes("ERC20InsufficientAllowance")) {
+        setStatus(`Insufficient allowance for ${tokenSymbolToUse}.`);
+      } else {
+        setStatus(
+          `Error approving ${type}: ${error.message || "Unknown error"}.`
+        );
+      }
       return false;
     }
   };
 
   const handleApprove = async () => {
     if (tokenDeposit === "0" || !formData.tokenAddress) {
-      setStatus(
-        "Calculate or enter valid token deposit and token address first."
-      );
+      setStatus("Enter valid token deposit and address first.");
       return;
     }
 
     const publicClient = getPublicClient(config);
 
-    // Approve presale token
     if (!isTokenApproved) {
       const success = await approveToken(
         formData.tokenAddress,
@@ -851,7 +920,6 @@ const CreatePresalePage: React.FC = () => {
       if (success) return;
     }
 
-    // Approve fee token
     if (
       creationFeeTokenAddress &&
       creationFeeTokenAddress !== zeroAddress &&
@@ -899,9 +967,7 @@ const CreatePresalePage: React.FC = () => {
       return;
     }
     if (tokenDeposit === "0" || parseFloat(tokenDeposit) <= 0) {
-      setStatus(
-        "Calculated token deposit is zero or invalid. Check parameters and recalculate."
-      );
+      setStatus("Invalid token deposit. Check parameters.");
       return;
     }
 
@@ -910,7 +976,7 @@ const CreatePresalePage: React.FC = () => {
       return;
     }
 
-    setStatus("All checks passed. Preparing transaction...");
+    setStatus("Preparing transaction...");
 
     try {
       const presaleOptions = {
@@ -972,10 +1038,13 @@ const CreatePresalePage: React.FC = () => {
           `Gas estimated: ${txOptions.gas.toString()}. Creating presale...`
         );
       } catch (gasError: any) {
+        console.error("Gas estimation error details:", gasError);
         setStatus(
-          `Gas estimation failed (${
-            gasError.message || "Unknown reason"
-          }), trying with manual gas limit.`
+          `Gas estimation failed (Reason: ${
+            gasError.shortMessage ||
+            gasError.message ||
+            "Unknown. Check console."
+          }), using manual gas limit.`
         );
       }
 
@@ -995,7 +1064,49 @@ const CreatePresalePage: React.FC = () => {
       setTxHash(hash);
       setStatus(`Transaction sent: ${hash}. Waiting for confirmation...`);
     } catch (error: any) {
-      setStatus(`Error creating presale: ${error.message || "Check console."}`);
+      if (error.message.includes("User denied")) {
+        setStatus("Presale creation cancelled by user.");
+      } else if (error.message.includes("PairAlreadyExists")) {
+        setStatus("A liquidity pair for this token already exists.");
+      } else if (error.message.includes("ERC20InsufficientBalance")) {
+        setStatus(`Insufficient ${tokenSymbol} balance for presale.`);
+      } else if (error.message.includes("ERC20InsufficientAllowance")) {
+        setStatus(`Insufficient allowance for ${tokenSymbol}.`);
+      } else if (error.message.includes("InvalidState")) {
+        setStatus("Presale is not in a valid state to be created.");
+      } else if (error.message.includes("NotInPurchasePeriod")) {
+        setStatus("Presale start time has already passed.");
+      } else if (error.message.includes("ZeroAmount")) {
+        setStatus("No tokens deposited for presale.");
+      } else if (error.message.includes("InsufficientTokenDeposit")) {
+        setStatus("Deposited tokens are less than required.");
+      } else if (error.message.includes("InvalidInitialization")) {
+        setStatus("Invalid contract initialization parameters.");
+      } else if (error.message.includes("InvalidLeftoverTokenOption")) {
+        setStatus("Invalid leftover token option selected.");
+      } else if (error.message.includes("InvalidHouseConfiguration")) {
+        setStatus("Invalid house fee configuration.");
+      } else if (error.message.includes("InvalidCapSettings")) {
+        setStatus("Hard cap or soft cap settings are invalid.");
+      } else if (error.message.includes("InvalidContributionLimits")) {
+        setStatus("Min or max contribution limits are invalid.");
+      } else if (error.message.includes("InvalidRates")) {
+        setStatus("Presale or listing rates are invalid.");
+      } else if (error.message.includes("InvalidTimestamps")) {
+        setStatus("Start or end times are invalid.");
+      } else if (error.message.includes("InvalidVestingPercentage")) {
+        setStatus("Vesting percentage is invalid.");
+      } else if (error.message.includes("InvalidMerkleRoot")) {
+        setStatus("Merkle root is required for whitelist type.");
+      } else if (error.message.includes("InvalidNftContractAddress")) {
+        setStatus("NFT contract address is required for whitelist type.");
+      } else if (error.message.includes("InvalidLiquidityBps")) {
+        setStatus("Liquidity BPS is invalid.");
+      } else {
+        setStatus(
+          `Error creating presale: ${error.message || "Unknown error"}.`
+        );
+      }
     }
   };
 
@@ -1054,7 +1165,7 @@ const CreatePresalePage: React.FC = () => {
           name={name as string}
           value={value as string | number}
           onChange={onChange}
-          className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 text-[#BFD4BF] text-base transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCAxMS41TDEyLjUgNy41SDMuNUw4IDExLjVaIiBmaWxsPSIjQkZENEJGIi8+PC9zdmc+')] bg-no-repeat bg-[right_0.75rem_center] bg-[length:12px_12px]"
+          className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 text-[#BFD4BF] text-base transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCA1NiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCAxMS41TDEyLjUgNy41SDMuNUw4IDExLjVaIiBmaWxsPSIjQkZENEJGIi8+PC9zdmc+')] bg-no-repeat bg-[right_0.75rem_center] bg-[length:12px_12px]"
           {...props}
         >
           {children}
@@ -1081,7 +1192,6 @@ const CreatePresalePage: React.FC = () => {
             type={type}
             id={name as string}
             name={name as string}
-            // Conditionally set value for non-file inputs
             value={type !== "file" ? (value as string | number) : undefined}
             placeholder={placeholder}
             onChange={onChange}
@@ -1139,7 +1249,7 @@ const CreatePresalePage: React.FC = () => {
                 label="Presale Image (Optional)"
                 name="presaleImage"
                 type="file"
-                value={formData.presaleImage} // Pass the file object to FormInput
+                value={formData.presaleImage}
                 onChange={handleInputChange}
                 info="Select an image file"
               />
@@ -1288,7 +1398,7 @@ const CreatePresalePage: React.FC = () => {
                 type="text"
                 value={formData.slippageBps}
                 onChange={handleInputChange}
-                placeholder="0-10000 (e.g., 500 for 5%)"
+                placeholder="0-3000 (e.g., 300 for 3%)"
                 required
               />
 
@@ -1343,7 +1453,6 @@ const CreatePresalePage: React.FC = () => {
               >
                 <option value="0">Return to Owner</option>
                 <option value="1">Burn</option>
-                {/* <option value="2">Vest</option> */}
               </FormInput>
 
               <SectionTitle title="Whitelist" />
@@ -1442,7 +1551,9 @@ const CreatePresalePage: React.FC = () => {
               <div className="fixed bottom-4 right-4 p-4 rounded-lg shadow-lg max-w-sm w-full bg-white/90 text-base flex items-center justify-between">
                 <span
                   className={`${
-                    status.includes("error")
+                    status.includes("error") ||
+                    status.includes("failed") ||
+                    status.includes("cancelled")
                       ? "text-red-600"
                       : status.includes("success")
                       ? "text-green-600"
@@ -1467,10 +1578,3 @@ const CreatePresalePage: React.FC = () => {
 };
 
 export default CreatePresalePage;
-
-/**
- * 
- * // Run this in Remix or a script to find matching selectors
-console.log(keccak256("0xe450d38c()").slice(0, 10));
-
- */

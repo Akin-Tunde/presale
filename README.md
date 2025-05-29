@@ -5,7 +5,7 @@
 3.  ERC20InsufficientAllowance(address,uint256,uint256)
     4.user cancel request
 
-    conditons fromthe contract
+    conditons fromthe contract i want us to effectand respective erro to toast on the frontend
     if (state != PresaleState.Pending) revert InvalidState(uint8(state));
     if (block.timestamp >= options.start) revert NotInPurchasePeriod();
 
@@ -74,7 +74,8 @@
             revert InvalidLiquidityBps();
         }
 
-# thinhf to cgange
+# thinhf to cange
 
-1. i approve twite before the buton turns to create presale
+1. i have to approve twite before the buton turns to create presale also wven when i approve i still get presale created... toasts
+
 2. //0x250Bb18dc15C261E13d125B2C1d4846A3BF9b800
