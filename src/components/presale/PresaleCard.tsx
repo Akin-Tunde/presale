@@ -25,6 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getPresaleImage } from "@/lib/supabase";
+import { sdk as FrameSDK } from "@farcaster/frame-sdk"; // Added Farcaster SDK import
+import { toast } from "sonner"; // Ensure toast is imported
 
 const presaleAbi = PresaleJson.abi as Abi;
 
@@ -218,24 +220,32 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
     }
   };
 
-  // Share URLs
-  const appUrl = "https://raize-5.netlify.app";
-  const presalePageUrl = `${appUrl}/#/presale/${presaleAddress}`;
+  // Share URLs and Text
+  const appUrl = "https://raize-5.netlify.app"; // Consider making this an env variable
+  const presalePageUrl = `${appUrl}/presale/${presaleAddress}`;
 
   // Create share text with presale name and token details
   const shareText = `Check out this presale on Raize: ${
     tokenSymbol || "Token"
-  } (${currencyDisplaySymbol} ) - Ends: ${formatDate(endTime)}`;
-
-  // Create Warpcast share URL
-  const warpcastShareUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(
-    shareText
-  )}&embeds[]=${encodeURIComponent(presalePageUrl)}`;
+  } (${currencyDisplaySymbol}) - Ends: ${formatDate(endTime)}`;
 
   // Create Twitter share URL
   const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
     shareText
   )}&url=${encodeURIComponent(presalePageUrl)}`;
+
+  // Handler for sharing on Warpcast using SDK
+  const handleShareOnWarpcast = async () => {
+    try {
+      await FrameSDK.actions.composeCast({
+        text: shareText,
+        embeds: [presalePageUrl],
+      });
+    } catch (error) {
+      console.error("Failed to compose cast for sharing presale:", error);
+      toast.error("Could not open Farcaster composer to share.");
+    }
+  };
 
   // Skeleton Loader
   if (isLoading) {
@@ -370,21 +380,22 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild>
-              <a
-                href={warpcastShareUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center cursor-pointer"
-              >
-                <img
-                  src="https://warpcast.com/favicon.ico"
-                  alt="Warpcast"
-                  className="h-4 w-4 mr-2"
-                />
-                Share on Warpcast
-              </a>
+            {/* Modified Warpcast Share Item */}
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault(); // Prevent default closing behavior
+                handleShareOnWarpcast();
+              }}
+              className="flex items-center cursor-pointer"
+            >
+              <img
+                src="https://warpcast.com/favicon.ico"
+                alt="Warpcast"
+                className="h-4 w-4 mr-2"
+              />
+              Share on Warpcast (SDK)
             </DropdownMenuItem>
+            {/* Twitter Share Item (Unchanged) */}
             <DropdownMenuItem asChild>
               <a
                 href={twitterShareUrl}
@@ -410,3 +421,4 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
 };
 
 export default PresaleCard;
+
