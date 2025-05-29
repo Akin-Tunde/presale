@@ -7,24 +7,18 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { parseEther, parseUnits, isAddress, zeroAddress, zeroHash } from "viem";
-import { createClient } from "@supabase/supabase-js";
-import { sepolia } from "viem/chains";
-import { createConfig, http } from "@wagmi/core";
+// import { sepolia } from "viem/chains"; ///
+// import { createConfig, http } from "@wagmi/core"; ///
 import { getPublicClient } from "@wagmi/core";
-
-// Supabase client setup (replace with your Supabase URL and anon key)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { supabase } from "@/lib/supabase";
+// import { farcasterFrame } from "@farcaster/frame-wagmi-connector";
+import { config } from "@/lib/wagmiConfig"; // Adjust the import path as needed
 
 // Wagmi configuration
-const config = createConfig({
-  chains: [sepolia],
-  transports: {
-    [sepolia.id]: http(),
-  },
-});
+// const config = createConfig({
+//   chains: [sepolia],
+//   transports: { [sepolia.id]: http() },
+// });
 
 // ABIs
 const factoryAbi = [
@@ -60,7 +54,7 @@ const factoryAbi = [
       { name: "_uniswapV2Router02", type: "address" },
     ],
     name: "createPresale",
-    outputs: [{ name: "presaleContract", type: "address" }],
+    outputs: [],
     stateMutability: "payable",
     type: "function",
   },
@@ -112,6 +106,15 @@ const factoryAbi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    name: "ERC20InsufficientBalance",
+    type: "error",
+    inputs: [
+      { name: "sender", type: "address" },
+      { name: "balance", type: "uint256" },
+      { name: "needed", type: "uint256" },
+    ],
+  },
 ];
 
 const erc20Abi = [
@@ -156,6 +159,15 @@ const erc20Abi = [
     stateMutability: "view",
     type: "function",
   },
+  {
+    name: "ERC20InsufficientBalance",
+    type: "error",
+    inputs: [
+      { name: "sender", type: "address" },
+      { name: "balance", type: "uint256" },
+      { name: "needed", type: "uint256" },
+    ],
+  },
 ];
 
 // Configuration
@@ -174,6 +186,108 @@ const formatDateForInput = (date: Date | null | undefined): string => {
 
 const isValidAddress = (address: string): boolean => {
   return address === "" || isAddress(address);
+};
+
+// Helper function to save presale data to Supabase, including image upload
+const savePresaleToSupabase = async (
+  presaleFormData: FormDataState,
+  creatorAddress: `0x${string}` | undefined,
+  transactionHash: `0x${string}`
+): Promise<{ success: boolean; message: string; imageUrl?: string }> => {
+  if (!creatorAddress) {
+    return { success: false, message: "Creator address is undefined." };
+  }
+
+  let presaleImageUrl: string | undefined = undefined;
+
+  // 1. Handle image upload if presaleImage exists
+  if (presaleFormData.presaleImage) {
+    const file = presaleFormData.presaleImage;
+    // Sanitize file name to prevent issues with special characters
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const fileName = `${Date.now()}_${sanitizedFileName}`;
+    // It's common to store public files in a 'public' folder within the bucket
+    // or organize by user/presale ID if applicable.
+    const filePath = `public/${fileName}`;
+
+    try {
+      console.log(
+        `Attempting to upload ${filePath} to presale-images bucket...`
+      );
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from("presale-images") // Make sure 'presale-images' bucket exists in Supabase
+        .upload(filePath, file, {
+          cacheControl: "3600", // Cache for 1 hour
+          upsert: false, // Set to true if you want to overwrite if file with same name exists
+        });
+
+      if (uploadError) {
+        console.error("Supabase image upload error:", uploadError);
+        // Decide if this error should prevent metadata saving.
+        // For now, we'll proceed but won't have an image URL.
+      } else if (uploadData) {
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("presale-images").getPublicUrl(filePath);
+        presaleImageUrl = publicUrl;
+        console.log("Image uploaded successfully:", presaleImageUrl);
+      }
+    } catch (e) {
+      console.error("Exception during image upload:", e);
+    }
+  }
+
+  // 2. Prepare data for Supabase table
+  const dataToInsert = {
+    creator: creatorAddress,
+    token_address: presaleFormData.tokenAddress,
+    currency_address: presaleFormData.currencyAddress,
+    image_url: presaleImageUrl, // Store the public URL of the uploaded image
+    presale_rate: presaleFormData.presaleRate,
+    listing_rate: presaleFormData.listingRate,
+    hard_cap: presaleFormData.hardCap,
+    soft_cap: presaleFormData.softCap,
+    min_contribution: presaleFormData.minContribution,
+    max_contribution: presaleFormData.maxContribution,
+    liquidity_bps: presaleFormData.liquidityBps,
+    lockup_duration: presaleFormData.lockupDuration,
+    start_time: presaleFormData.start,
+    end_time: presaleFormData.end,
+    claim_delay_minutes: presaleFormData.claimDelayMinutes,
+    use_vesting: presaleFormData.useVesting,
+    vesting_tge_percent: presaleFormData.vestingTgePercent,
+    vesting_cycle_days: presaleFormData.vestingCycleDays,
+    leftover_token_option: presaleFormData.leftoverTokenOption,
+    slippage_bps: presaleFormData.slippageBps,
+    whitelist_type: presaleFormData.whitelistType,
+    merkle_root: presaleFormData.merkleRoot || zeroHash,
+    nft_contract_address: presaleFormData.nftContractAddress || zeroAddress,
+    transaction_hash: transactionHash,
+    created_at: new Date().toISOString(),
+  };
+
+  // 3. Insert into Supabase 'presales' table
+  try {
+    const { error } = await supabase.from("presales").insert([dataToInsert]);
+    if (error) {
+      console.error("Supabase insert error:", error);
+      return {
+        success: false,
+        message: `Failed to save presale to database: ${error.message}`,
+      };
+    }
+    return {
+      success: true,
+      message: "Presale created and saved successfully!",
+      imageUrl: presaleImageUrl,
+    };
+  } catch (error: any) {
+    console.error("Exception during Supabase insert:", error);
+    return {
+      success: false,
+      message: `Exception saving presale to database: ${error.message}`,
+    };
+  }
 };
 
 interface FormDataState {
@@ -207,7 +321,7 @@ const CreatePresalePage: React.FC = () => {
   const { writeContractAsync } = useWriteContract();
   const [formData, setFormData] = useState<FormDataState>({
     tokenAddress: "",
-    currencyAddress: "",
+    currencyAddress: zeroAddress,
     presaleImage: null,
     presaleRate: "100",
     listingRate: "80",
@@ -216,7 +330,7 @@ const CreatePresalePage: React.FC = () => {
     minContribution: "0.1",
     maxContribution: "1",
     liquidityBps: "7000",
-    lockupDuration: (30 * 24 * 60 * 60).toString(),
+    lockupDuration: (1 * 30 * 24 * 60 * 60).toString(), // Default to 1 month in seconds
     start: formatDateForInput(new Date(Date.now() + 5 * 60 * 1000)),
     end: formatDateForInput(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
     claimDelayMinutes: "10",
@@ -236,13 +350,15 @@ const CreatePresalePage: React.FC = () => {
   >(null);
   const [creationFeeTokenSymbol, setCreationFeeTokenSymbol] =
     useState<string>("ETH");
-  const [status, setStatus] = useState<string>("Please connect your wallet.");
+  const [status, setStatus] = useState<string>("");
   const [tokenBalance, setTokenBalance] = useState<string>("0");
   const [tokenDecimals, setTokenDecimals] = useState<number>(18);
   const [tokenSymbol, setTokenSymbol] = useState<string>("");
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>(undefined);
   const { data: receipt, isLoading: isTxPending } =
     useWaitForTransactionReceipt({ hash: txHash });
+  const [isTokenApproved, setIsTokenApproved] = useState(false);
+  const [isFeeApproved, setIsFeeApproved] = useState(false);
 
   // Fetch factory fee and fee token
   const { data: creationFeeData } = useReadContract({
@@ -277,6 +393,27 @@ const CreatePresalePage: React.FC = () => {
     query: { enabled: isConnected && isValidAddress(formData.tokenAddress) },
   });
 
+  // Fetch allowances
+  const { data: tokenAllowanceData } = useReadContract({
+    address: formData.tokenAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [address, FACTORY_ADDRESS as `0x${string}`],
+    query: { enabled: isConnected && isValidAddress(formData.tokenAddress) },
+  });
+  const { data: feeAllowanceData } = useReadContract({
+    address: creationFeeTokenAddress as `0x${string}`,
+    abi: erc20Abi,
+    functionName: "allowance",
+    args: [address, FACTORY_ADDRESS as `0x${string}`],
+    query: {
+      enabled:
+        isConnected &&
+        !!creationFeeTokenAddress &&
+        creationFeeTokenAddress !== zeroAddress,
+    },
+  });
+
   // Initialize provider and fetch fee details
   useEffect(() => {
     const init = async () => {
@@ -307,10 +444,9 @@ const CreatePresalePage: React.FC = () => {
             setCreationFee((Number(creationFeeData) / 10 ** 18).toString());
             setCreationFeeTokenSymbol("ETH");
           }
-          setStatus("Factory fee loaded. Ready to connect.");
+          setStatus("");
         }
       } catch (error: any) {
-        console.error("Error fetching fee details:", error);
         setStatus(
           `Error fetching fee details: ${
             error.message || "Unknown error"
@@ -332,53 +468,74 @@ const CreatePresalePage: React.FC = () => {
     }
   }, [tokenDecimalsData, tokenSymbolData, tokenBalanceData]);
 
+  // Check approvals
+  useEffect(() => {
+    if (tokenAllowanceData && tokenDeposit !== "0") {
+      const requiredAmount = parseUnits(tokenDeposit, tokenDecimals);
+      setIsTokenApproved(Number(tokenAllowanceData) >= Number(requiredAmount));
+    }
+    if (
+      feeAllowanceData &&
+      creationFeeTokenAddress &&
+      creationFeeTokenAddress !== zeroAddress &&
+      parseFloat(creationFee) > 0
+    ) {
+      const publicClient = getPublicClient(config);
+      publicClient
+        .readContract({
+          address: creationFeeTokenAddress as `0x${string}`,
+          abi: erc20Abi,
+          functionName: "decimals",
+        })
+        .then((feeDecimals) => {
+          const requiredFeeAmount = parseUnits(
+            creationFee,
+            Number(feeDecimals)
+          );
+          setIsFeeApproved(
+            Number(feeAllowanceData) >= Number(requiredFeeAmount)
+          );
+        });
+    } else if (
+      creationFeeTokenAddress === zeroAddress ||
+      parseFloat(creationFee) === 0
+    ) {
+      setIsFeeApproved(true);
+    }
+  }, [
+    tokenAllowanceData,
+    feeAllowanceData,
+    tokenDeposit,
+    creationFee,
+    creationFeeTokenAddress,
+    tokenDecimals,
+  ]);
+
   // Handle transaction receipt
   useEffect(() => {
     if (receipt && receipt.status === "success") {
       setStatus(`Presale created successfully! Tx: ${receipt.transactionHash}`);
-      // Save presale data to Supabase
-      const savePresale = async () => {
-        try {
-          const { error } = await supabase.from("presales").insert([
-            {
-              creator: address,
-              token_address: formData.tokenAddress,
-              currency_address: formData.currencyAddress || zeroAddress,
-              presale_rate: formData.presaleRate,
-              listing_rate: formData.listingRate,
-              hard_cap: formData.hardCap,
-              soft_cap: formData.softCap,
-              min_contribution: formData.minContribution,
-              max_contribution: formData.maxContribution,
-              liquidity_bps: formData.liquidityBps,
-              lockup_duration: formData.lockupDuration,
-              start_time: formData.start,
-              end_time: formData.end,
-              claim_delay_minutes: formData.claimDelayMinutes,
-              use_vesting: formData.useVesting,
-              vesting_tge_percent: formData.vestingTgePercent,
-              vesting_cycle_days: formData.vestingCycleDays,
-              leftover_token_option: formData.leftoverTokenOption,
-              slippage_bps: formData.slippageBps,
-              whitelist_type: formData.whitelistType,
-              merkle_root: formData.merkleRoot || zeroHash,
-              nft_contract_address: formData.nftContractAddress || zeroAddress,
-              transaction_hash: receipt.transactionHash,
-              created_at: new Date().toISOString(),
-            },
-          ]);
-          if (error) throw error;
+
+      // Call the new function to save data to Supabase
+      savePresaleToSupabase(formData, address, receipt.transactionHash)
+        .then((result) => {
+          if (result.success) {
+            setStatus(
+              `${result.message} Tx: ${receipt.transactionHash}${
+                result.imageUrl ? ` Image: ${result.imageUrl}` : ""
+              }`
+            );
+          } else {
+            setStatus(
+              `Presale created on-chain, but DB save failed: ${result.message} Tx: ${receipt.transactionHash}`
+            );
+          }
+        })
+        .catch((error) => {
           setStatus(
-            `Presale created and saved successfully! Tx: ${receipt.transactionHash}`
+            `Presale created on-chain, but an unexpected error occurred during DB save: ${error.message}`
           );
-        } catch (error: any) {
-          console.error("Error saving presale to Supabase:", error);
-          setStatus(
-            `Presale created but failed to save to Supabase: ${error.message}`
-          );
-        }
-      };
-      savePresale();
+        });
     } else if (receipt && receipt.status === "reverted") {
       setStatus("Transaction failed: Reverted. Check console.");
     }
@@ -468,7 +625,7 @@ const CreatePresalePage: React.FC = () => {
         leftoverTokenOption: BigInt(
           parseInt(formData.leftoverTokenOption || "0")
         ),
-        currency: validateAndParseAddress(formData.currencyAddress, "Currency"),
+        currency: zeroAddress as `0x${string}`,
         whitelistType: BigInt(parseInt(formData.whitelistType || "0")),
         merkleRoot: (formData.whitelistType === "1" && formData.merkleRoot
           ? formData.merkleRoot
@@ -495,7 +652,6 @@ const CreatePresalePage: React.FC = () => {
         `Required token deposit: ${formattedTokens} ${tokenSymbol || "tokens"}.`
       );
     } catch (error: any) {
-      console.error("Error calculating token deposit:", error);
       setTokenDeposit("0");
       setStatus(
         `Error calculating token deposit: ${
@@ -515,18 +671,29 @@ const CreatePresalePage: React.FC = () => {
     const { name, value, type } = e.target;
     let newFormData = { ...formData };
 
-    if (type === "checkbox") {
+    if (name === "lockupDuration" && type === "select-one") {
+      const selectedMonths = parseInt(value);
+      const durationInSeconds = selectedMonths * 30 * 24 * 60 * 60; // Assuming 30 days per month
+      newFormData = {
+        ...formData,
+        lockupDuration: durationInSeconds.toString(),
+      };
+    } else if (type === "checkbox") {
       newFormData = {
         ...formData,
         [name]: (e.target as HTMLInputElement).checked,
       };
     } else if (type === "file") {
+      const file = (e.target as HTMLInputElement).files
+        ? (e.target as HTMLInputElement).files![0]
+        : null;
       newFormData = {
         ...formData,
-        [name]: (e.target as HTMLInputElement).files
-          ? (e.target as HTMLInputElement).files![0]
-          : null,
+        [name]: file,
       };
+      if (file && name === "presaleImage") {
+        setStatus(`Selected image: ${file.name}`);
+      }
     } else {
       newFormData = { ...formData, [name]: value };
     }
@@ -573,6 +740,43 @@ const CreatePresalePage: React.FC = () => {
     }
   };
 
+  const validateTimes = (): string | null => {
+    const now = Date.now();
+    const startTime = new Date(formData.start).getTime();
+    const endTime = new Date(formData.end).getTime();
+
+    if (isNaN(startTime) || isNaN(endTime)) {
+      return "Invalid date format for start or end time. Please ensure they are correctly set.";
+    }
+
+    // Start time must be at least (e.g.) 5 minutes in the future
+    const minStartDelay = 5 * 60 * 1000;
+    if (startTime <= now + minStartDelay) {
+      return `Start time must be at least ${
+        minStartDelay / (60 * 1000)
+      } minutes in the future.`;
+    }
+
+    if (endTime <= startTime) {
+      return "End time must be after start time.";
+    }
+
+    const minDuration = 1 * 60 * 60 * 1000; // 1 hour
+    if (endTime - startTime < minDuration) {
+      return "Presale duration must be at least 1 hour.";
+    }
+
+    const maxDuration = 90 * 24 * 60 * 60 * 1000; // 90 days
+    if (endTime - startTime > maxDuration) {
+      return "Presale duration cannot exceed 90 days.";
+    }
+    const maxStartAhead = 180 * 24 * 60 * 60 * 1000; // 180 days
+    if (startTime > now + maxStartAhead) {
+      return `Start time cannot be scheduled more than 180 days in the future. The provided 2025 dates might be too far out.`;
+    }
+    return null;
+  };
+
   const approveToken = async (
     tokenAddr: string,
     amountToApprove: string,
@@ -615,7 +819,6 @@ const CreatePresalePage: React.FC = () => {
       setTxHash(hash);
       return true;
     } catch (error: any) {
-      console.error(`Error approving ${type}:`, error);
       setStatus(
         `Error approving ${type}: ${
           error.message || "Unknown error"
@@ -625,50 +828,53 @@ const CreatePresalePage: React.FC = () => {
     }
   };
 
-  const handleApprovePresaleToken = () => {
+  const handleApprove = async () => {
     if (tokenDeposit === "0" || !formData.tokenAddress) {
       setStatus(
         "Calculate or enter valid token deposit and token address first."
       );
       return;
     }
-    approveToken(
-      formData.tokenAddress,
-      tokenDeposit,
-      FACTORY_ADDRESS,
-      tokenDecimals,
-      tokenSymbol,
-      "Presale Token"
-    );
-  };
 
-  const handleApproveFeeToken = async () => {
-    if (!creationFeeTokenAddress || creationFeeTokenAddress === zeroAddress) {
-      setStatus("Fee is in ETH, no token approval needed.");
-      return;
-    }
-    if (parseFloat(creationFee) <= 0) {
-      setStatus("Creation fee is zero, no approval needed.");
-      return;
-    }
-    try {
-      const publicClient = getPublicClient(config);
-      const feeDecimals = (await publicClient.readContract({
-        address: creationFeeTokenAddress as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "decimals",
-      })) as number;
-      await approveToken(
-        creationFeeTokenAddress,
-        creationFee,
+    const publicClient = getPublicClient(config);
+
+    // Approve presale token
+    if (!isTokenApproved) {
+      const success = await approveToken(
+        formData.tokenAddress,
+        tokenDeposit,
         FACTORY_ADDRESS,
-        feeDecimals,
-        creationFeeTokenSymbol,
-        "Fee Token"
+        tokenDecimals,
+        tokenSymbol,
+        "Presale Token"
       );
-    } catch (err: any) {
-      setStatus("Could not get fee token decimals for approval.");
-      console.error("Fee token decimals error:", err);
+      if (success) return;
+    }
+
+    // Approve fee token
+    if (
+      creationFeeTokenAddress &&
+      creationFeeTokenAddress !== zeroAddress &&
+      parseFloat(creationFee) > 0 &&
+      !isFeeApproved
+    ) {
+      try {
+        const feeDecimals = (await publicClient.readContract({
+          address: creationFeeTokenAddress as `0x${string}`,
+          abi: erc20Abi,
+          functionName: "decimals",
+        })) as number;
+        await approveToken(
+          creationFeeTokenAddress,
+          creationFee,
+          FACTORY_ADDRESS,
+          feeDecimals,
+          creationFeeTokenSymbol,
+          "Fee Token"
+        );
+      } catch (err: any) {
+        setStatus("Could not get fee token decimals for approval.");
+      }
     }
   };
 
@@ -678,6 +884,12 @@ const CreatePresalePage: React.FC = () => {
       return;
     }
     setStatus("Validating parameters...");
+
+    const timeValidationError = validateTimes();
+    if (timeValidationError) {
+      setStatus(timeValidationError);
+      return;
+    }
 
     if (
       !isValidAddress(formData.tokenAddress) ||
@@ -693,49 +905,9 @@ const CreatePresalePage: React.FC = () => {
       return;
     }
 
-    // Check presale token allowance
-    const publicClient = getPublicClient(config);
-    const requiredTokenAmountWei = parseUnits(tokenDeposit, tokenDecimals);
-    const allowance = (await publicClient.readContract({
-      address: formData.tokenAddress as `0x${string}`,
-      abi: erc20Abi,
-      functionName: "allowance",
-      args: [address!, FACTORY_ADDRESS as `0x${string}`],
-    })) as bigint;
-    if (allowance < requiredTokenAmountWei) {
-      setStatus(
-        `Insufficient presale token allowance. Need ${tokenDeposit}, approved ${(
-          Number(allowance) /
-          10 ** tokenDecimals
-        ).toFixed(0)}. Please approve.`
-      );
+    if (!isTokenApproved || !isFeeApproved) {
+      setStatus("Please approve tokens first.");
       return;
-    }
-
-    // Check fee token allowance
-    if (
-      creationFeeTokenAddress &&
-      creationFeeTokenAddress !== zeroAddress &&
-      parseFloat(creationFee) > 0
-    ) {
-      const feeTokenDecimals = (await publicClient.readContract({
-        address: creationFeeTokenAddress as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "decimals",
-      })) as number;
-      const requiredFeeAmountWei = parseUnits(creationFee, feeTokenDecimals);
-      const feeAllowance = (await publicClient.readContract({
-        address: creationFeeTokenAddress as `0x${string}`,
-        abi: erc20Abi,
-        functionName: "allowance",
-        args: [address!, FACTORY_ADDRESS as `0x${string}`],
-      })) as bigint;
-      if (feeAllowance < requiredFeeAmountWei) {
-        setStatus(
-          `Insufficient fee token allowance. Need ${creationFee} ${creationFeeTokenSymbol}. Please approve.`
-        );
-        return;
-      }
     }
 
     setStatus("All checks passed. Preparing transaction...");
@@ -761,7 +933,7 @@ const CreatePresalePage: React.FC = () => {
           ? BigInt(parseInt(formData.vestingCycleDays) * 24 * 60 * 60)
           : BigInt(0),
         leftoverTokenOption: BigInt(parseInt(formData.leftoverTokenOption)),
-        currency: validateAndParseAddress(formData.currencyAddress, "Currency"),
+        currency: zeroAddress as `0x${string}`,
         whitelistType: BigInt(parseInt(formData.whitelistType)),
         merkleRoot: (formData.whitelistType === "1" && formData.merkleRoot
           ? formData.merkleRoot
@@ -780,8 +952,8 @@ const CreatePresalePage: React.FC = () => {
       }
 
       setStatus("Sending transaction to create presale...");
+      const publicClient = getPublicClient(config);
       try {
-        // const walletClient = await getWalletClient(config);
         const gasEstimate = await publicClient.estimateContractGas({
           address: FACTORY_ADDRESS as `0x${string}`,
           abi: factoryAbi,
@@ -800,7 +972,6 @@ const CreatePresalePage: React.FC = () => {
           `Gas estimated: ${txOptions.gas.toString()}. Creating presale...`
         );
       } catch (gasError: any) {
-        console.warn("Gas estimation failed, using manual limit:", gasError);
         setStatus(
           `Gas estimation failed (${
             gasError.message || "Unknown reason"
@@ -824,7 +995,6 @@ const CreatePresalePage: React.FC = () => {
       setTxHash(hash);
       setStatus(`Transaction sent: ${hash}. Waiting for confirmation...`);
     } catch (error: any) {
-      console.error("Error creating presale:", error);
       setStatus(`Error creating presale: ${error.message || "Check console."}`);
     }
   };
@@ -834,7 +1004,7 @@ const CreatePresalePage: React.FC = () => {
     name: keyof FormDataState | string;
     type?: string;
     placeholder?: string;
-    value?: string | number | boolean;
+    value?: string | number | boolean | File | null;
     onChange: (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
     children?: React.ReactNode;
     info?: string;
@@ -858,13 +1028,15 @@ const CreatePresalePage: React.FC = () => {
     checked,
     ...props
   }) => (
-    <div className="mb-4">
+    <div className="relative mb-6 group">
       <label
         htmlFor={name as string}
-        className="block text-sm font-medium text-gray-700 mb-1"
+        className="block text-base font-semibold text-[#BFD4BF] mb-2 transition-all duration-300 group-hover:text-[#D4E8D4]"
       >
         {label} {required && <span className="text-red-500">*</span>}
-        {info && <span className="text-xs text-gray-500 ml-1">({info})</span>}
+        {info && (
+          <span className="text-sm text-[#BFD4BF]/70 ml-2">({info})</span>
+        )}
       </label>
       {type === "checkbox" ? (
         <input
@@ -873,7 +1045,7 @@ const CreatePresalePage: React.FC = () => {
           name={name as string}
           checked={checked}
           onChange={onChange}
-          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+          className="h-5 w-5 text-[#BFD4BF] border-[#BFD4BF]/50 rounded focus:ring-[#BFD4BF]/50 focus:ring-2 cursor-pointer transition-all duration-300 hover:bg-[#BFD4BF]/10"
           {...props}
         />
       ) : type === "select" ? (
@@ -882,379 +1054,412 @@ const CreatePresalePage: React.FC = () => {
           name={name as string}
           value={value as string | number}
           onChange={onChange}
-          className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+          className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 text-[#BFD4BF] text-base transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNOCAxMS41TDEyLjUgNy41SDMuNUw4IDExLjVaIiBmaWxsPSIjQkZENEJGIi8+PC9zdmc+')] bg-no-repeat bg-[right_0.75rem_center] bg-[length:12px_12px]"
           {...props}
         >
           {children}
         </select>
+      ) : type === "file" ? (
+        <div className="relative">
+          <input
+            type={type}
+            id={name as string}
+            name={name as string}
+            onChange={onChange}
+            className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm text-[#BFD4BF] text-base file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#BFD4BF]/20 file:text-[#BFD4BF] file:font-semibold file:hover:bg-[#BFD4BF]/30 file:transition-all file:duration-300 cursor-pointer focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30"
+            {...props}
+          />
+          {name === "presaleImage" && typeof value === "object" && value && (
+            <span className="text-sm text-[#BFD4BF]/80 ml-2 mt-1 block">
+              Selected: {(value as File).name}
+            </span>
+          )}
+        </div>
       ) : (
-        <input
-          type={type}
-          id={name as string}
-          name={name as string}
-          value={value as string | number}
-          placeholder={placeholder}
-          onChange={onChange}
-          className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-          {...props}
-        />
+        <div className="relative">
+          <input
+            type={type}
+            id={name as string}
+            name={name as string}
+            // Conditionally set value for non-file inputs
+            value={type !== "file" ? (value as string | number) : undefined}
+            placeholder={placeholder}
+            onChange={onChange}
+            className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 text-[#BFD4BF] text-base placeholder-[#BFD4BF]/50 transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30"
+            {...props}
+          />
+          <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#BFD4BF]/10 to-[#BFD4BF]/5 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none" />
+        </div>
       )}
-      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {error && (
+        <p className="text-sm text-red-500 mt-1.5 font-medium">{error}</p>
+      )}
     </div>
   );
 
   const SectionTitle: React.FC<{ title: string }> = ({ title }) => (
-    <h2 className="text-xl font-semibold mt-6 mb-3 pt-4 border-t border-gray-200">
+    <h2 className="text-xl font-bold text-[#BFD4BF] mt-8 mb-4 pt-4 border-t border-[#BFD4BF]/20 relative">
       {title}
+      <div className="absolute bottom-0 left-0 w-4 h-1 bg-[#BFD4BF] rounded-full" />
     </h2>
   );
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="bg-white p-6 rounded-lg shadow-lg w-full max-w-2xl">
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-800">
+    <div className="min-h-screen bg-emerald-100 flex items-center justify-center p-4 md:p-6 relative">
+      <div className="relative bg-[#1C2526]/95 backdrop-blur-xl p-8 rounded-lg shadow-2xl shadow-[#BFD4BF]/5 w-full max-w-2xl">
+        <h1 className="text-3xl font-bold mb-6 text-center text-[#BFD4BF]">
           Create Your Token Presale
         </h1>
 
         {!isConnected ? (
           <button
-            className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition ease-in-out duration-150 font-medium mb-4"
+            className="w-full bg-[#BFD4BF] text-[#14213E] py-3 px-6 rounded-lg font-semibold text-lg hover:bg-[#D4E8D4] focus:outline-none focus:ring-2 focus:ring-[#BFD4BF]/50 transition-all duration-300 shadow-md hover:shadow-[#BFD4BF]/30"
             onClick={connectWallet}
           >
             Connect Wallet
           </button>
-        ) : null}
-
-        {status && (
-          <div
-            className={`p-3 mb-4 rounded-md text-sm ${
-              status.toLowerCase().includes("error")
-                ? "bg-red-100 text-red-700"
-                : status.toLowerCase().includes("success")
-                ? "bg-green-100 text-green-700"
-                : "bg-blue-100 text-blue-700"
-            }`}
-          >
-            {status}
-          </div>
-        )}
-
-        {isConnected && (
-          <div className="space-y-4">
-            <SectionTitle title="Token & Currency Information" />
-            <FormInput
-              label="Token Address"
-              name="tokenAddress"
-              value={formData.tokenAddress}
-              onChange={handleInputChange}
-              placeholder="0x..."
-              required
-            />
-            <FormInput
-              label="Currency Address"
-              name="currencyAddress"
-              value={formData.currencyAddress}
-              onChange={handleInputChange}
-              placeholder="Leave empty for ETH (Native Currency)"
-              info="e.g., USDC, USDT contract address"
-            />
-            <FormInput
-              label="Presale Image (Optional)"
-              name="presaleImage"
-              type="file"
-              onChange={handleInputChange}
-              info="Select an image file"
-            />
-
-            <SectionTitle title="Sale Parameters" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        ) : (
+          <>
+            <div className="space-y-6">
+              <SectionTitle title="Token & Currency Information" />
               <FormInput
-                label="Presale Rate"
-                name="presaleRate"
-                type="number"
-                value={formData.presaleRate}
-                onChange={handleInputChange}
-                placeholder="Tokens per ETH"
-                required
-                info={`Tokens per ${
-                  formData.currencyAddress ? "selected currency" : "ETH"
-                }`}
-              />
-              <FormInput
-                label="Listing Rate"
-                name="listingRate"
-                type="number"
-                value={formData.listingRate}
-                onChange={handleInputChange}
-                placeholder="Tokens per ETH for LP"
-                required
-                info="For initial DEX liquidity"
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormInput
-                label="Hard Cap"
-                name="hardCap"
-                type="number"
-                value={formData.hardCap}
-                onChange={handleInputChange}
-                placeholder="e.g., 100"
-                required
-                info={`In ${
-                  formData.currencyAddress ? "selected currency" : "ETH"
-                }`}
-              />
-              <FormInput
-                label="Soft Cap"
-                name="softCap"
-                type="number"
-                value={formData.softCap}
-                onChange={handleInputChange}
-                placeholder="e.g., 50"
-                required
-                info={`In ${
-                  formData.currencyAddress ? "selected currency" : "ETH"
-                }`}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormInput
-                label="Minimum Contribution"
-                name="minContribution"
-                type="number"
-                value={formData.minContribution}
-                onChange={handleInputChange}
-                placeholder="e.g., 0.1"
-                required
-                info={`Per user, in ${
-                  formData.currencyAddress ? "selected currency" : "ETH"
-                }`}
-              />
-              <FormInput
-                label="Maximum Contribution"
-                name="maxContribution"
-                type="number"
-                value={formData.maxContribution}
-                onChange={handleInputChange}
-                placeholder="e.g., 1"
-                required
-                info={`Per user, in ${
-                  formData.currencyAddress ? "selected currency" : "ETH"
-                }`}
-              />
-            </div>
-
-            <SectionTitle title="Liquidity & Schedule" />
-            <FormInput
-              label="Liquidity BPS"
-              name="liquidityBps"
-              type="select"
-              value={formData.liquidityBps}
-              onChange={handleInputChange}
-              required
-              info="Percent of raised funds for LP"
-            >
-              <option value="">Select Liquidity %</option>
-              <option value="5000">50%</option>
-              <option value="6000">60%</option>
-              <option value="7000">70%</option>
-              <option value="8000">80%</option>
-              <option value="9000">90%</option>
-              <option value="10000">100%</option>
-            </FormInput>
-            <FormInput
-              label="LP Lockup Duration (seconds)"
-              name="lockupDuration"
-              type="number"
-              value={formData.lockupDuration}
-              onChange={handleInputChange}
-              placeholder="e.g., 2592000 for 30 days"
-              required
-            />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormInput
-                label="Presale Start Time"
-                name="start"
-                type="datetime-local"
-                value={formData.start}
-                onChange={handleInputChange}
-                required
-              />
-              <FormInput
-                label="Presale End Time"
-                name="end"
-                type="datetime-local"
-                value={formData.end}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <FormInput
-              label="Claim Delay (minutes after presale ends)"
-              name="claimDelayMinutes"
-              type="number"
-              value={formData.claimDelayMinutes}
-              onChange={handleInputChange}
-              info="Informational, not enforced by this base contract"
-            />
-            <FormInput
-              label="Router Slippage BPS"
-              name="slippageBps"
-              type="number"
-              value={formData.slippageBps}
-              onChange={handleInputChange}
-              placeholder="0-10000 (e.g., 500 for 5%)"
-              required
-            />
-
-            <SectionTitle title="Vesting (Optional)" />
-            <div className="flex items-center">
-              <FormInput
-                label=""
-                name="useVesting"
-                type="checkbox"
-                checked={formData.useVesting}
-                onChange={handleInputChange}
-              />
-              <label
-                htmlFor="useVesting"
-                className="ml-2 text-sm font-medium text-gray-700 cursor-pointer"
-              >
-                Enable Vesting for Participants
-              </label>
-            </div>
-
-            {formData.useVesting && (
-              <div className="pl-6 mt-2 space-y-4 border-l-2 border-gray-200">
-                <FormInput
-                  label="TGE Percent"
-                  name="vestingTgePercent"
-                  type="number"
-                  value={formData.vestingTgePercent}
-                  onChange={handleInputChange}
-                  placeholder="0-100 (e.g., 10 for 10%)"
-                  info="Percentage of tokens released at TGE"
-                />
-                <FormInput
-                  label="Vesting Cycle Days"
-                  name="vestingCycleDays"
-                  type="number"
-                  value={formData.vestingCycleDays}
-                  onChange={handleInputChange}
-                  placeholder="e.g., 30"
-                  info="Duration of each vesting period after TGE"
-                />
-              </div>
-            )}
-
-            <SectionTitle title="Additional Options" />
-            <FormInput
-              label="Leftover Token Option"
-              name="leftoverTokenOption"
-              type="select"
-              value={formData.leftoverTokenOption}
-              onChange={handleInputChange}
-              required
-            >
-              <option value="0">Return to Owner</option>
-              <option value="1">Burn</option>
-              <option value="2">
-                Vest with Liquidity (if contract supports)
-              </option>
-            </FormInput>
-
-            <SectionTitle title="Whitelist Configuration" />
-            <FormInput
-              label="Whitelist Type"
-              name="whitelistType"
-              type="select"
-              value={formData.whitelistType}
-              onChange={handleInputChange}
-            >
-              <option value="0">None (Public Sale)</option>
-              <option value="1">Merkle Tree</option>
-              <option value="2">NFT Holders</option>
-            </FormInput>
-            {formData.whitelistType === "1" && (
-              <FormInput
-                label="Merkle Root"
-                name="merkleRoot"
-                value={formData.merkleRoot}
-                onChange={handleInputChange}
-                placeholder="0x... (32-byte hex)"
-              />
-            )}
-            {formData.whitelistType === "2" && (
-              <FormInput
-                label="NFT Contract Address"
-                name="nftContractAddress"
-                value={formData.nftContractAddress}
+                label="Token Address"
+                name="tokenAddress"
+                value={formData.tokenAddress}
                 onChange={handleInputChange}
                 placeholder="0x..."
+                required
               />
-            )}
+              <div className="mb-4 p-2 bg-[#1C2526] rounded-lg border-t border-[#BFD4BF]/20">
+                <p className="text-sm font-medium text-[#BFD4BF]">
+                  Currency: ETH
+                </p>
+              </div>
+              <FormInput
+                label="Presale Image (Optional)"
+                name="presaleImage"
+                type="file"
+                value={formData.presaleImage} // Pass the file object to FormInput
+                onChange={handleInputChange}
+                info="Select an image file"
+              />
 
-            <div className="mt-6 pt-6 border-t">
-              <p className="text-sm text-gray-700">
-                Token to Deposit:{" "}
-                <span className="font-semibold">
-                  {tokenDeposit} {tokenSymbol}
-                </span>{" "}
-                (Decimals: {tokenDecimals})
-              </p>
-              <p className="text-sm text-gray-700">
-                Your Token Balance:{" "}
-                <span className="font-semibold">
-                  {tokenBalance} {tokenSymbol}
-                </span>
-              </p>
-              <p className="text-sm text-gray-700">
-                Presale Creation Fee:{" "}
-                <span className="font-semibold">
-                  {creationFee} {creationFeeTokenSymbol}
-                </span>
-              </p>
-            </div>
+              <SectionTitle title="Sale Settings" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormInput
+                  label="Presale Rate"
+                  name="presaleRate"
+                  type="text"
+                  value={formData.presaleRate}
+                  onChange={handleInputChange}
+                  placeholder="Tokens per ETH"
+                  required
+                  info="Tokens per ETH"
+                />
+                <FormInput
+                  label="Listing Rate"
+                  name="listingRate"
+                  type="text"
+                  value={formData.listingRate}
+                  onChange={handleInputChange}
+                  placeholder="Tokens per ETH for LP"
+                  required
+                  info="For DEX liquidity"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormInput
+                  label="Hard Cap"
+                  name="hardCap"
+                  type="text"
+                  value={formData.hardCap}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 100"
+                  required
+                  info="In ETH"
+                />
+                <FormInput
+                  label="Soft Cap"
+                  name="softCap"
+                  type="text"
+                  value={formData.softCap}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 50"
+                  required
+                  info="In ETH"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormInput
+                  label="Min Contribution"
+                  name="minContribution"
+                  type="text"
+                  value={formData.minContribution}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 0.1"
+                  required
+                  info="Per user, in ETH"
+                />
+                <FormInput
+                  label="Max Contribution"
+                  name="maxContribution"
+                  type="text"
+                  value={formData.maxContribution}
+                  onChange={handleInputChange}
+                  placeholder="e.g., 1"
+                  required
+                  info="Per user, in ETH"
+                />
+              </div>
 
-            <div className="mt-8 space-y-3">
-              <button
-                type="button"
-                className="w-full bg-indigo-500 text-white py-2 px-4 rounded-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
-                onClick={checkTokenBalanceAndDetails}
-                disabled={isTxPending}
+              <SectionTitle title="Liquidity & Schedule" />
+              <FormInput
+                label="Liquidity BPS"
+                name="liquidityBps"
+                type="select"
+                value={formData.liquidityBps}
+                onChange={handleInputChange}
+                required
+                info="% of funds for LP"
               >
-                Refresh Token Balance & Details
-              </button>
-              {creationFeeTokenAddress &&
-                creationFeeTokenAddress !== zeroAddress &&
-                parseFloat(creationFee) > 0 && (
-                  <button
-                    type="button"
-                    className="w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50"
-                    onClick={handleApproveFeeToken}
-                    disabled={isTxPending}
+                <option value="">Select %</option>
+                <option value="5000">50%</option>
+                <option value="6000">60%</option>
+                <option value="7000">70%</option>
+                <option value="8000">80%</option>
+                <option value="9000">90%</option>
+                <option value="10000">100%</option>
+              </FormInput>
+              <FormInput
+                label="LP Lockup Duration (Months)"
+                name="lockupDuration"
+                type="select"
+                value={(
+                  parseInt(
+                    formData.lockupDuration ||
+                      (1 * 30 * 24 * 60 * 60).toString()
+                  ) /
+                  (30 * 24 * 60 * 60)
+                ).toString()}
+                onChange={handleInputChange}
+                required
+                info="Select lockup period in months"
+              >
+                {[...Array(6)].map((_, i) => {
+                  const months = i + 1;
+                  return (
+                    <option key={months} value={months.toString()}>
+                      {months} Month{months > 1 ? "s" : ""}
+                    </option>
+                  );
+                })}
+              </FormInput>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormInput
+                  label="Start Time"
+                  name="start"
+                  type="datetime-local"
+                  value={formData.start}
+                  onChange={handleInputChange}
+                  required
+                />
+                <FormInput
+                  label="End Time"
+                  name="end"
+                  type="datetime-local"
+                  value={formData.end}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              <FormInput
+                label="Claim Delay"
+                name="claimDelayMinutes"
+                type="text"
+                value={formData.claimDelayMinutes}
+                onChange={handleInputChange}
+                placeholder="Minutes after presale"
+                info="Informational"
+              />
+              <FormInput
+                label="Slippage BPS"
+                name="slippageBps"
+                type="text"
+                value={formData.slippageBps}
+                onChange={handleInputChange}
+                placeholder="0-10000 (e.g., 500 for 5%)"
+                required
+              />
+
+              <SectionTitle title="Vesting" />
+              <div className="flex items-center gap-3">
+                <FormInput
+                  label=""
+                  name="useVesting"
+                  type="checkbox"
+                  checked={formData.useVesting}
+                  onChange={handleInputChange}
+                />
+                <label
+                  htmlFor="useVesting"
+                  className="text-base font-semibold text-[#BFD4BF] cursor-pointer hover:text-[#D4E8D4]"
+                >
+                  Enable Vesting
+                </label>
+              </div>
+
+              {formData.useVesting && (
+                <div className="pl-6 space-y-6">
+                  <FormInput
+                    label="TGE %"
+                    name="vestingTgePercent"
+                    type="text"
+                    value={formData.vestingTgePercent}
+                    onChange={handleInputChange}
+                    placeholder="0-100 (e.g., 10%)"
+                    info="Tokens at TGE"
+                  />
+                  <FormInput
+                    label="Vesting Days"
+                    name="vestingCycleDays"
+                    type="text"
+                    value={formData.vestingCycleDays}
+                    onChange={handleInputChange}
+                    placeholder="e.g., 30"
+                    info="Per cycle"
+                  />
+                </div>
+              )}
+
+              <SectionTitle title="Additional Options" />
+              <FormInput
+                label="Leftover Tokens"
+                name="leftoverTokenOption"
+                type="select"
+                value={formData.leftoverTokenOption}
+                onChange={handleInputChange}
+                required
+              >
+                <option value="0">Return to Owner</option>
+                <option value="1">Burn</option>
+                {/* <option value="2">Vest</option> */}
+              </FormInput>
+
+              <SectionTitle title="Whitelist" />
+              <FormInput
+                label="Whitelist Type"
+                name="whitelistType"
+                type="select"
+                value={formData.whitelistType}
+                onChange={handleInputChange}
+              >
+                <option value="0">Public</option>
+                <option value="1">Merkle Tree</option>
+                <option value="2">NFT Holders</option>
+              </FormInput>
+              {formData.whitelistType === "1" && (
+                <FormInput
+                  label="Merkle Root"
+                  name="merkleRoot"
+                  value={formData.merkleRoot}
+                  onChange={handleInputChange}
+                  placeholder="0x..."
+                />
+              )}
+              {formData.whitelistType === "2" && (
+                <FormInput
+                  label="NFT Contract"
+                  name="nftContractAddress"
+                  value={formData.nftContractAddress}
+                  onChange={handleInputChange}
+                  placeholder="0x..."
+                />
+              )}
+
+              <div className="mt-6 pt-4 border-t border-[#BFD4BF]/20">
+                <p className="text-base text-[#BFD4BF] mb-1">
+                  Token to Deposit:{" "}
+                  <span className="font-semibold">
+                    {tokenDeposit} {tokenSymbol}
+                  </span>
+                </p>
+                <p className="text-base text-[#BFD4BF] mb-1">
+                  Your Balance:{" "}
+                  <span className="font-semibold">
+                    {tokenBalance} {tokenSymbol}
+                  </span>
+                </p>
+                <p className="text-base text-[#BFD4BF]">
+                  Creation Fee:{" "}
+                  <span className="font-semibold">
+                    {creationFee} {creationFeeTokenSymbol}
+                  </span>
+                </p>
+              </div>
+
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  className="w-full bg-[#BFD4BF] text-[#14213E] py-3 px-6 rounded-lg font-semibold text-lg hover:bg-[#D4E8D4] focus:outline-none transition-all duration-300 shadow-md hover:shadow-[#BFD4BF]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={
+                    isTokenApproved && isFeeApproved
+                      ? createPresale
+                      : handleApprove
+                  }
+                  disabled={isTxPending}
+                >
+                  {isTokenApproved && isFeeApproved
+                    ? "Create Presale"
+                    : "Approve Tokens"}
+                </button>
+                <button
+                  type="button"
+                  className="p-2 text-[#BFD4BF] hover:text-[#D4E8D4] transition-all duration-300"
+                  onClick={checkTokenBalanceAndDetails}
+                  disabled={isTxPending}
+                  title="Refresh Token Details"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
                   >
-                    Approve Fee Token ({creationFeeTokenSymbol})
-                  </button>
-                )}
-              <button
-                type="button"
-                className="w-full bg-yellow-500 text-white py-2 px-4 rounded-md hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-opacity-50"
-                onClick={handleApprovePresaleToken}
-                disabled={isTxPending}
-              >
-                Approve Presale Token ({tokenSymbol || "Token"})
-              </button>
-              <button
-                type="button"
-                className="w-full bg-green-600 text-white py-2.5 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 font-semibold text-lg"
-                onClick={createPresale}
-                disabled={isTxPending}
-              >
-                Create Presale
-              </button>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                </button>
+              </div>
             </div>
-          </div>
+
+            {status && (
+              <div className="fixed bottom-4 right-4 p-4 rounded-lg shadow-lg max-w-sm w-full bg-white/90 text-base flex items-center justify-between">
+                <span
+                  className={`${
+                    status.includes("error")
+                      ? "text-red-600"
+                      : status.includes("success")
+                      ? "text-green-600"
+                      : "text-blue-600"
+                  }`}
+                >
+                  {status}
+                </span>
+                <button
+                  className="text-gray-500 hover:text-gray-700 text-sm font-medium"
+                  onClick={() => setStatus("")}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -1262,3 +1467,10 @@ const CreatePresalePage: React.FC = () => {
 };
 
 export default CreatePresalePage;
+
+/**
+ * 
+ * // Run this in Remix or a script to find matching selectors
+console.log(keccak256("0xe450d38c()").slice(0, 10));
+
+ */
