@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { HashRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"; // Import ThemeProvider
 import { config } from "./lib/wagmiConfig";
@@ -27,7 +27,7 @@ const queryClient = new QueryClient();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <HashRouter>
+    <BrowserRouter>
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
           <FarcasterFrameProvider>
@@ -40,6 +40,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </FarcasterFrameProvider>
         </QueryClientProvider>
       </WagmiProvider>
-    </HashRouter>
+    </BrowserRouter>
   </React.StrictMode>
 );
