@@ -7,7 +7,7 @@ const { createClient } = require("@supabase/supabase-js");
 // --- Environment Variables ---
 const SUPABASE_URL = process.env.VITE_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
-const APP_URL = process.env.APP_URL || "http://localhost:5173"; // Base URL of your frontend app
+const APP_URL = process.env.APP_URL || "https://presale-umber-phi.vercel.app/"; // Base URL of your frontend app
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn("[Frame Handler] Supabase URL or Anon Key missing. Cannot fetch presale details.");
