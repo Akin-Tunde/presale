@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/presale/:address",
+      "destination": "/api/frame-handler"
+    },
+    {
+      "source": "/((?!api/|_next/|static/|assets/|favicon.ico|logo.jpg|image.png|manifest.json|robots.txt|sw.js|workbox-.*.js|Inter-Regular.ttf|Inter-Bold.ttf).*)",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/*.cjs": {
+      "runtime": "@vercel/node@5.1.16"
+    },
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@5.1.16"
+    }
+  }
+}
