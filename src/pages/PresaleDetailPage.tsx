@@ -31,7 +31,7 @@ import { getPresaleStatus, getInitials } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   AlertCircle,
-  Info,
+  
   RefreshCw,
   Fuel,
   Lock,
