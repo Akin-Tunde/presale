@@ -91,7 +91,7 @@ export async function notifyPresaleCreated(
   totalSupply: string,
   endDate: string
 ): Promise<void> {
-  const appUrl = "https://raize-5.netlify.app";
+  const appUrl = "https://presale-umber-phi.vercel.app/";
   const targetUrl = `${appUrl}/presale/${presaleAddress}`;
   
   const payload: NotificationPayload = {
@@ -115,7 +115,7 @@ export async function notifyPresaleEnded(
   tokenSymbol: string,
   contributorAddresses: string[]
 ): Promise<void> {
-  const appUrl = "https://raize-5.netlify.app";
+  const appUrl = "https://presale-umber-phi.vercel.app/";
   const targetUrl = `${appUrl}/presale/${presaleAddress}`;
   
   const payload: NotificationPayload = {

@@ -1109,3 +1109,5 @@ const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
 };
 
 export default PresaleDetailPage;
+
+
