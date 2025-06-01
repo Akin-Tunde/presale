@@ -221,7 +221,7 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
   };
 
   // Share URLs and Text
-  const appUrl = "https://raize-5.netlify.app"; // Consider making this an env variable
+  const appUrl = "https://presale-umber-phi.vercel.app/"; // Consider making this an env variable
   const presalePageUrl = `${appUrl}/presale/${presaleAddress}`;
 
   // Create share text with presale name and token details

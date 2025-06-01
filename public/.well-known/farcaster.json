@@ -1,17 +1,17 @@
 {
   "accountAssociation": {
     "header": "eyJmaWQiOjEwNDI1MjIsInR5cGUiOiJjdXN0b2R5Iiwia2V5IjoiMHhjRjlCNjczZTM3NmM2ZGQwMDliNDNlQzc2MTM5YUVhYmRBMDJCNjRlIn0",
-    "payload": "eyJkb21haW4iOiJyYWl6ZS01Lm5ldGxpZnkuYXBwIn0",
-    "signature": "MHgyNGE2OTYzOWU2OWYxZjY3MjI2MTcyYTQ3NjE2YmRlMjkyOTkxMDFiNGIzYjc5NzkwNGI4Njc0NDEzNmM0Y2E0MTViN2M4YzhiOWY0MDQxNGZkYmY2MWMxN2M5YmQxZWI3MjZiOWQyYjM5NjEzMGVjY2YyYzkyMjY5MDA4ZDU2ODFj"
+    "payload": "eyJkb21haW4iOiJwcmVzYWxlLXVtYmVyLXBoaS52ZXJjZWwuYXBwIn0",
+    "signature": "MHgwNWM2OGEyNDAyZDRlZjY4MDAyMjU0OWQ3ZGJmMTg4ZjEzNmUxMjFiOWQ3OGI4MjkwNDNlZjgyNDNiNTJlYmNiNzA5NzE5ZjZmMGEwYWNhMDQ2ZDU5YTQyMzVhMWM4YmRmNDljM2MzZmYyNThiMDYzNzRiNDU4ZTk5YWEyNDc2ZTFj"
   },
   "frame": {
     "version": "1",
     "name": "Raize",
-    "iconUrl": "https://raize-5.netlify.app/logo.png",
+    "iconUrl": "https://presale-umber-phi.vercel.app/logo.png",
     "homeUrl": "https://raize-5.netlify.app",
-    "imageUrl": "https://raize-5.netlify.app/logo.png",
+    "imageUrl": "https://presale-umber-phi.vercel.app/logo.png",
     "buttonTitle": "Explore Presale",
-    "splashImageUrl": "https://raize-5.netlify.app/logo.png",
+    "splashImageUrl": "https://presale-umber-phi.vercel.app/logo.png",
     "splashBackgroundColor": "#ffffff",
     "webhookUrl": "https://api.neynar.com/f/app/77af59ea-8cfa-48b1-a199-6b0eec64fddb/event",
     "subtitle": "Presales",
@@ -21,7 +21,7 @@
     "tagline": "Explore presales with Raize!",
     "ogTitle": "Raize",
     "ogDescription": "Become early adopters of the next big thing in crypto.",
-    "ogImage": "https://raize-5.netlify.app/logo.png",
+    "ogImage": "https://presale-umber-phi.vercel.app/logo.png",
     "noindex": false,
     "permissions": ["cast:read"],
     "notifications": {

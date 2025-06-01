@@ -31,7 +31,7 @@ import { getPresaleStatus, getInitials } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   AlertCircle,
-  Info,
+  
   RefreshCw,
   Fuel,
   Lock,
@@ -41,10 +41,12 @@ import {
   Calendar,
   Users,
   Wallet,
+  Share, // Added Share icon
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { sdk } from "@farcaster/frame-sdk"; // Added Farcaster SDK import
 
 const presaleAbi = PresaleJson.abi as Abi;
 
@@ -361,7 +363,7 @@ const PresaleDetailPage = () => {
   const allowance = allowanceResult as bigint | undefined;
 
   // --- Derived State & Calculations ---
-const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
+  const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
   const hardCap = options?.[1] as bigint | undefined;
   const softCap = options?.[2] as bigint | undefined;
   const minContrib = options?.[3] as bigint | undefined;
@@ -658,6 +660,25 @@ const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
     }
   };
 
+  // --- Farcaster Share Handler ---
+  const handleSharePresale = async () => {
+    if (!presaleAddress || !tokenSymbol) {
+      toast.error("Cannot share: Presale details missing.");
+      return;
+    }
+    // Use window.location.href for the current page URL
+    const shareUrl = window.location.href;
+    const shareText = `Check out the ${tokenSymbol || 'token'} presale!\nJoin here:`;
+
+    try {
+      await sdk.actions.composeCast({ text: shareText, embeds: [shareUrl] });
+      console.log("Farcaster composer opened for sharing:", shareText, shareUrl);
+    } catch (error) {
+      console.error("Failed to compose cast for sharing presale:", error);
+      toast.error("Could not open Farcaster composer to share.");
+    }
+  };
+
   if (isLoadingPresale && !presaleData) return <PresaleDetailSkeleton />;
   if (!presaleAddress || !options)
     return (
@@ -736,6 +757,17 @@ const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
                       }`}
                     />
                   </Button>
+                  {/* Added Share Button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSharePresale}
+                    disabled={isActionInProgress} // Disable during other actions
+                    className="ml-1 text-white/80 hover:text-white hover:bg-white/10"
+                    title="Share on Farcaster"
+                  >
+                    <Share className="h-4 w-4" />
+                  </Button>
                 </h1>
                 <div className="flex items-center mt-2 gap-3">
                   <span className="flex items-center text-sm">
@@ -783,7 +815,166 @@ const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
         </div>
 
         <CardContent className="p-6 space-y-8 bg-background">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Contribution Section */}
+          {canContribute && (
+            <div className="pt-6 border-t border-primary-100/20">
+              <h3 className="text-lg font-heading font-semibold mb-4 text-foreground">
+                Contribute to Presale
+              </h3>
+              <div className="space-y-4">
+                <Input
+                  type="number"
+                  placeholder={`Amount in ${currencyDisplaySymbol}`}
+                  value={contributionAmount}
+                  onChange={(e) => setContributionAmount(e.target.value)}
+                  disabled={isActionInProgress}
+                  className="border-primary-200 focus:border-primary-500 focus:ring-primary-500"
+                  min={minContribFormatted !== "N/A" ? minContribFormatted : "0"}
+                  max={maxContribFormatted !== "N/A" ? maxContribFormatted : undefined}
+                  step="any"
+                />
+                {whitelistEnabled &&
+                  merkleRoot &&
+                  merkleRoot !== bytesToHex(new Uint8Array(32).fill(0)) && (
+                    <Textarea
+                      placeholder="Enter your Merkle Proof (comma or newline separated 0x... hashes)"
+                      value={merkleProofInput}
+                      onChange={(e) => setMerkleProofInput(e.target.value)}
+                      disabled={isActionInProgress}
+                      rows={3}
+                      className="border-primary-200 focus:border-primary-500 focus:ring-primary-500 font-mono text-xs"
+                    />
+                  )}
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {!currencyIsEth && needsApproval && (
+                    <Button
+                      onClick={handleApprove}
+                      disabled={isActionInProgress || !contributionAmountParsed}
+                      className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-yellow-900 transition-all duration-200 shadow-sm hover:shadow-md"
+                    >
+                      {currentAction === "approve" && isActionInProgress ? (
+                        <>
+                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                          Approving...
+                        </>
+                      ) : (
+                        "Approve"
+                      )}
+                      <EstimatedFeeDisplay fee={approveFee} />
+                    </Button>
+                  )}
+                  <Button
+                    onClick={handleContribute}
+                    disabled={
+                      isActionInProgress ||
+                      !contributionAmountParsed ||
+                      (!currencyIsEth && needsApproval)
+                    }
+                    className="flex-1 bg-primary-600 hover:bg-primary-700 text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    {currentAction === "contribute" && isActionInProgress ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Contributing...
+                      </>
+                    ) : (
+                      "Contribute"
+                    )}
+                    <EstimatedFeeDisplay fee={contributeFee} />
+                  </Button>
+                </div>
+                {actionError && (
+                  <Alert variant="destructive" className="bg-errorBg border-red-200">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertTitle className="text-red-800">Error</AlertTitle>
+                    <AlertDescription className="text-red-700">
+                      {actionError}
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Claim/Refund Section */}
+          {(canClaim || canRefund) && (
+            <div className="pt-6 border-t border-primary-100/20">
+              <h3 className="text-lg font-heading font-semibold mb-4 text-foreground">
+                Actions
+              </h3>
+              <div className="flex flex-col sm:flex-row gap-2">
+                {canClaim && (
+                  <Button
+                    onClick={() => handleClaimOrRefund("claim")}
+                    disabled={isActionInProgress}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    {currentAction === "claim" && isActionInProgress ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Claiming...
+                      </>
+                    ) : (
+                      `Claim ${userClaimableTokensFormatted} ${tokenSymbol || "Tokens"}`
+                    )}
+                    <EstimatedFeeDisplay fee={claimFee} />
+                  </Button>
+                )}
+                {canRefund && (
+                  <Button
+                    onClick={() => handleClaimOrRefund("refund")}
+                    disabled={isActionInProgress}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    {currentAction === "refund" && isActionInProgress ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Refunding...
+                      </>
+                    ) : (
+                      `Refund ${userContributionFormatted} ${currencyDisplaySymbol}`
+                    )}
+                    <EstimatedFeeDisplay fee={refundFee} />
+                  </Button>
+                )}
+              </div>
+              {actionError && currentAction && (canClaim || canRefund) && (
+                <Alert variant="destructive" className="mt-4 bg-errorBg border-red-200">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertTitle className="text-red-800">Error</AlertTitle>
+                  <AlertDescription className="text-red-700">
+                    {actionError}
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
+          {/* User Info Section */}
+          {isConnected && userContribution !== undefined && (userContribution as bigint) > 0n && (
+            <div className="pt-6 border-t border-primary-100/20">
+              <h3 className="text-lg font-heading font-semibold mb-2 text-foreground">
+                Your Contribution
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                You contributed:{" "}
+                <span className="font-semibold text-foreground">
+                  {userContributionFormatted} {currencyDisplaySymbol}
+                </span>
+              </p>
+              {canClaim && (
+                <p className="text-sm text-muted-foreground mt-1">
+                  Claimable:{" "}
+                  <span className="font-semibold text-foreground">
+                    {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Presale Details Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-primary-100/20">
             <div className="bg-primary-50 rounded-lg p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200">
               <div className="text-primary-900 font-medium mb-2 flex items-center">
                 <Wallet className="h-4 w-4 mr-2" /> Token Economics
@@ -907,201 +1098,50 @@ const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
                 <p>
                   Vesting Period:{" "}
                   <span className="font-semibold text-foreground">
-                    {(vestingOptions as any)?.vestingPeriodSeconds / 86400} days
+                    {(vestingOptions as any)?.vestingPeriodSeconds
+                      ? formatLockupDuration((vestingOptions as any)?.vestingPeriodSeconds)
+                      : "N/A"}
                   </span>
                 </p>
                 <p>
-                  Cycle Release:{" "}
+                  Cliff Period:{" "}
                   <span className="font-semibold text-foreground">
-                    {(vestingOptions as any)?.cycleReleasePercentage / 100}% per
-                    cycle
+                    {(vestingOptions as any)?.cliffSeconds
+                      ? formatLockupDuration((vestingOptions as any)?.cliffSeconds)
+                      : "0 days"}
                   </span>
                 </p>
               </div>
             </div>
           )}
 
-          {actionError && (
-            <Alert variant="destructive" className="bg-errorBg border-red-200">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertTitle className="text-red-800">Error</AlertTitle>
-              <AlertDescription className="text-red-700">
-                {actionError}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {canContribute && (
-            <div className="pt-6 border-t border-primary-100/20">
-              <h3 className="text-lg font-heading font-semibold mb-4 text-foreground">
-                Contribute
-              </h3>
-              <div className="space-y-4">
-                <Input
-                  type="text"
-                  placeholder={`Amount in ${currencyDisplaySymbol}`}
-                  value={contributionAmount}
-                  onChange={(e) => setContributionAmount(e.target.value)}
-                  disabled={isActionInProgress}
-                  className="border-primary-200 focus:ring-primary-500 focus:border-primary-500"
-                />
-                {whitelistEnabled &&
-                  merkleRoot &&
-                  merkleRoot !== bytesToHex(new Uint8Array(32).fill(0)) && (
-                    <Textarea
-                      placeholder="Enter Merkle Proof (comma or newline separated)"
-                      value={merkleProofInput}
-                      onChange={(e) => setMerkleProofInput(e.target.value)}
-                      disabled={isActionInProgress}
-                      rows={4}
-                      className="border-primary-200 focus:ring-primary-500 focus:border-primary-500"
-                    />
-                  )}
-                {needsApproval && !currencyIsEth ? (
-                  <Button
-                    onClick={handleApprove}
-                    disabled={isActionInProgress || !contributionAmount}
-                    className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
-                  >
-                    {isApproving ? "Approving..." : "Approve"}
-                  {typeof approveFee === "bigint" && approveFee !== 0n && (
-  <EstimatedFeeDisplay fee={approveFee} />
-)}
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={handleContribute}
-                    disabled={isActionInProgress || !contributionAmount}
-                    className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
-                  >
-                    {isWritePending && currentAction === "contribute"
-                      ? "Contributing..."
-                      : "Contribute"}
-                  {typeof contributeFee === "bigint" && contributeFee !== 0n && (
-  <EstimatedFeeDisplay fee={contributeFee} />
-)}
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {canClaim && (
-            <div className="pt-6 border-t border-primary-100/20">
-              <h3 className="text-lg font-heading font-semibold mb-4 text-foreground">
-                Claim Tokens
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                You can claim{" "}
-                <span className="font-semibold text-foreground">
-                  {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
-                </span>
-                .
-              </p>
-              <Button
-                onClick={() => handleClaimOrRefund("claim")}
-                disabled={isActionInProgress}
-                className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
+          {/* Contract Address Info */}
+          <div className="pt-6 border-t border-primary-100/20 text-center">
+            <p className="text-sm text-muted-foreground">
+              Presale Contract:{" "}
+              <a
+                href={`https://basescan.org/address/${presaleAddress}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-primary-600 hover:text-primary-800 hover:underline break-all"
               >
-                {isWritePending && currentAction === "claim"
-                  ? "Claiming..."
-                  : "Claim"}
-                {typeof claimFee === "bigint" && claimFee !== 0n && (
-  <EstimatedFeeDisplay fee={claimFee} />
-)}
-              </Button>
-            </div>
-          )}
-
-          {canRefund && (
-            <div className="pt-6 border-t border-primary-100/20">
-              <h3 className="text-lg font-heading font-semibold mb-4 text-foreground">
-                Refund Contribution
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                You can refund your contribution of{" "}
-                <span className="font-semibold text-foreground">
-                  {userContributionFormatted} {currencyDisplaySymbol}
-                </span>
-                .
+                {presaleAddress}
+              </a>
+            </p>
+            {tokenAddress && (
+              <p className="text-sm text-muted-foreground mt-1">
+                Token Contract:{" "}
+                <a
+                  href={`https://basescan.org/address/${tokenAddress}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs text-primary-600 hover:text-primary-800 hover:underline break-all"
+                >
+                  {tokenAddress}
+                </a>
               </p>
-              <Button
-                onClick={() => handleClaimOrRefund("refund")}
-                disabled={isActionInProgress}
-                className="w-full bg-gradient-to-r from-primary-900 to-primary-800 text-white hover:from-primary-800 hover:to-primary-700"
-              >
-                {isWritePending && currentAction === "refund"
-                  ? "Refunding..."
-                  : "Refund"}
-                {typeof refundFee === "bigint" && refundFee !== 0n && (
-  <EstimatedFeeDisplay fee={refundFee} />
-)}
-              </Button>
-            </div>
-          )}
-
-          {state === 0 && (
-            <Alert
-              variant="default"
-              className="bg-primary-50 border-primary-200"
-            >
-              <Info className="h-4 w-4 text-primary-700" />
-              <AlertTitle className="text-primary-900">
-                Presale Has Not Started
-              </AlertTitle>
-              <AlertDescription className="text-muted-foreground">
-                This presale is scheduled to start on{" "}
-                <span className="font-semibold">
-                  {startTime
-                    ? new Date(Number(startTime) * 1000).toLocaleString()
-                    : "N/A"}
-                </span>
-                .
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {state === 3 && !softCapMet && (
-            <Alert variant="destructive" className="bg-errorBg border-red-200">
-              <AlertTriangle className="h-4 w-4 text-red-600" />
-              <AlertTitle className="text-red-800">
-                Presale Ended - Softcap Not Met
-              </AlertTitle>
-              <AlertDescription className="text-red-700">
-                The presale has ended and the softcap was not met. You can claim
-                a refund for your contribution.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {state === 2 && softCapMet && (
-            <Alert variant="default" className="bg-successBg border-green-200">
-              <CheckCircle className="h-4 w-4 text-green-600" />
-              <AlertTitle className="text-green-800">
-                Presale Ended - Successful!
-              </AlertTitle>
-              <AlertDescription className="text-green-700">
-                The presale has ended successfully. You can now claim your
-                tokens.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {state === 4 && (
-            <Alert
-              variant="default"
-              className="bg-primary-50 border-primary-200"
-            >
-              <Info className="h-4 w-4 text-primary-700" />
-              <AlertTitle className="text-primary-900">
-                Presale Finalized
-              </AlertTitle>
-              <AlertDescription className="text-muted-foreground">
-                This presale has been finalized. Unclaimed tokens may have been
-                burnt or withdrawn by the owner.
-              </AlertDescription>
-            </Alert>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -1109,3 +1149,4 @@ const presaleStatus = getPresaleStatus(state, options) as PresaleStatus;
 };
 
 export default PresaleDetailPage;
+
