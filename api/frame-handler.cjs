@@ -313,7 +313,7 @@ module.exports = async (req, res) => {
     const frameMeta = {
       version: "next",
       imageUrl: frameData.imageUrl,
-      aspectRatio: "1.91:1",
+      imageAspectRatio: "1.91:1",
       postUrl: `${postUrl}?address=${presaleAddress}`,
       button: {
         title: "Join Presale",
@@ -345,10 +345,10 @@ module.exports = async (req, res) => {
   <meta property="og:image" content="${frameData.imageUrl}" />
 `;
 
-    //   // <meta property="fc:frame:image:aspect_ratio" content="1.91:1" />
     // TODO: Customize these tags based on fetched frameData and desired frame logic
     // const metaTags = `
     //   // <meta property="fc:frame" content="vNext" />
+    //   // <meta property="fc:frame:image:aspect_ratio" content="1.91:1" />
     //   // <meta property="fc:frame:image" content="${frameData.imageUrl}" />
     //   // <meta property="fc:frame:post_url" content="${postUrl}?address=${presaleAddress}" />
 
