@@ -1,5 +1,5 @@
-const presaleAbiArray = require("../Presale.json");
+const presaleAbiModuleResolved = require("../Presale.json");
 
 module.exports = {
-  PRESALE_ABI: presaleAbiArray,
+  PRESALE_ABI: presaleAbiModuleResolved,
 };
