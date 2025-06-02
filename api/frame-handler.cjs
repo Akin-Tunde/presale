@@ -317,40 +317,15 @@ module.exports = async (req, res) => {
       <meta property="fc:frame:image:aspect_ratio" content="1.91:1" />
       <meta property="fc:frame:post_url" content="${postUrl}?address=${presaleAddress}" />
 
-      <meta property="fc:frame:button:1" content="View Presale Details" />
-      <meta property="fc:frame:button:1:action" content="link" />
-      <meta property="fc:frame:button:1:target" content="${pageUrl}" />
+      <meta property="fc:frame:button:1" content="Explore on Raize" />
+      <meta property="fc:frame:button:1:action" content="launch_frame" />
+      <meta property="fc:frame:button:1:target" content="${APP_URL}" />
+      <meta property="fc:frame:button:1:name" content="Raize" />
+      <meta property="fc:frame:button:1:splash_image_url" content="${APP_URL}/logo.png" />
+      <meta property="fc:frame:button:1:splash_background_color" content="#1f2937" />
 
-      ${
-        frameData.status.toLowerCase().includes("active")
-          ? `
-      <meta property="fc:frame:button:2" content="Contribute Now" />
-      <meta property="fc:frame:button:2:action" content="link" />
-      <meta property="fc:frame:button:2:target" content="${pageUrl}" /> 
-      `
-          : ""
-      }
-      ${
-        frameData.status.toLowerCase().includes("success") &&
-        !frameData.status.toLowerCase().includes("active") // Only show claim if not also active (e.g. hard cap reached but not ended)
-          ? `
-      <meta property="fc:frame:button:2" content="Claim Tokens" />
-      <meta property="fc:frame:button:2:action" content="link" />
-      <meta property="fc:frame:button:2:target" content="${pageUrl}" /> 
-      `
-          : ""
-      }
-      
-      <meta property="og:title" content="${
-        frameData.tokenSymbol
-      } Presale on Raize" />
-      <meta property="og:description" content="Join the ${
-        frameData.tokenSymbol
-      } presale! Status: ${frameData.status}. Rate: ${frameData.presaleRate} ${
-      frameData.tokenSymbol
-    }/${frameData.currencySymbol}. Hard Cap: ${frameData.hardCap} ${
-      frameData.currencySymbol
-    }." />
+      <meta property="og:title" content="${frameData.tokenSymbol} Presale on Raize" />
+      <meta property="og:description" content="Join the ${frameData.tokenSymbol} presale! Status: ${frameData.status}. Rate: ${frameData.presaleRate} ${frameData.tokenSymbol}/${frameData.currencySymbol}. Hard Cap: ${frameData.hardCap} ${frameData.currencySymbol}." />
       <meta property="og:image" content="${frameData.imageUrl}" />
     `;
 
