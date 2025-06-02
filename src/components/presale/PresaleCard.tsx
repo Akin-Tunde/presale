@@ -221,7 +221,7 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
   };
 
   // Share URLs and Text
-  const appUrl = "https://presale-umber-phi.vercel.app/";
+  const appUrl = "https://raize-taupe.vercel.app";
   const presalePageUrl = `${appUrl}/presale/${presaleAddress}`;
 
   // Create share text with presale name and token details
