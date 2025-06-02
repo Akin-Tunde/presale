@@ -236,7 +236,15 @@ module.exports = async (req, res) => {
 
     // --- Generate SVG with Satori ---
     const svg = await satori(
-      { type: "div", props: { children: html, style: { display: "flex" } } }, // Satori expects a React-like element structure
+      // If 'html' is an HTML string, use dangerouslySetInnerHTML
+      // to ensure Satori parses and renders it as HTML elements.
+      {
+        type: "div",
+        props: {
+          style: { display: "flex", width: "100%", height: "100%" }, // Ensure the root div takes full space
+          dangerouslySetInnerHTML: { __html: html },
+        },
+      },
       {
         width: 1200,
         height: 630,

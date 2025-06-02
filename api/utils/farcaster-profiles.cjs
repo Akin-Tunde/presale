@@ -1,17 +1,44 @@
 const { getAddress, isAddress } = require("viem");
-const { NeynarAPIClient } = require("@neynar/nodejs-sdk");
+const { NeynarAPIClient, Configuration } = require("@neynar/nodejs-sdk");
 
 const NEYNAR_API_KEY = process.env.NEYNAR_API_KEY;
+const NEYNAR_EXPERIMENTAL_ENABLED =
+  process.env.NEYNAR_EXPERIMENTAL_ENABLED === "true";
+
+let neynarClient = null;
 
 if (!NEYNAR_API_KEY) {
   console.warn(
     "[FarcasterProfilesUtil] NEYNAR_API_KEY is not set. Profile fetching will be disabled."
   );
-}
+} else {
+  try {
+    const configOptions = {
+      apiKey: NEYNAR_API_KEY,
+    };
 
-const neynarClient = NEYNAR_API_KEY
-  ? new NeynarAPIClient(NEYNAR_API_KEY)
-  : null;
+    // Conditionally add baseOptions for experimental features if enabled
+    if (NEYNAR_EXPERIMENTAL_ENABLED) {
+      configOptions.baseOptions = {
+        headers: {
+          "x-neynar-experimental": true,
+        },
+      };
+    }
+
+    const neynarConfig = new Configuration(configOptions);
+    neynarClient = new NeynarAPIClient(neynarConfig);
+    console.log(
+      "[FarcasterProfilesUtil] Neynar client initialized successfully."
+    );
+  } catch (error) {
+    console.error(
+      "[FarcasterProfilesUtil] Failed to initialize Neynar client:",
+      error
+    );
+    // neynarClient remains null, and the functions will handle this.
+  }
+}
 
 const profileCache = new Map(); // Simple in-memory cache for the lifetime of the function invocation
 
@@ -30,10 +57,11 @@ const profileCache = new Map(); // Simple in-memory cache for the lifetime of th
  * @returns {Promise<Record<string, FarcasterUserProfile>>} A map of addresses to profiles.
  */
 async function fetchFarcasterProfilesByAddresses(addresses) {
-  if (!neynarClient) {
-    console.warn("[FarcasterProfilesUtil] Neynar client not initialized.");
+  const validAddresses = (addresses || []).filter(isAddress).map(getAddress);
+
+  if (!neynarClient || validAddresses.length === 0) {
     const fallbackProfiles = {};
-    addresses.forEach((addr) => {
+    validAddresses.forEach((addr) => {
       const normalizedAddr = getAddress(addr);
       fallbackProfiles[normalizedAddr] = {
         custodyAddress: normalizedAddr,
@@ -45,10 +73,10 @@ async function fetchFarcasterProfilesByAddresses(addresses) {
     return fallbackProfiles;
   }
 
-  const validAddresses = addresses.filter(isAddress).map(getAddress);
   const profilesToReturn = {};
   const addressesToFetchFromAPI = [];
 
+  // Populate from cache or identify addresses to fetch
   for (const addr of validAddresses) {
     if (profileCache.has(addr)) {
       profilesToReturn[addr] = profileCache.get(addr);
@@ -57,6 +85,7 @@ async function fetchFarcasterProfilesByAddresses(addresses) {
     }
   }
 
+  // Fetch from Neynar API if there are any addresses not in cache
   if (addressesToFetchFromAPI.length > 0) {
     try {
       const result = await neynarClient.fetchBulkUsersByEthereumAddress(
