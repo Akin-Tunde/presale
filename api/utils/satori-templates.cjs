@@ -44,7 +44,7 @@ function getPresaleImageHtml(data) {
       <!-- Progress Bar -->
       <div style="display: flex; flex-direction: column; margin-bottom: 15px;">
         <span style="font-size: 28px; color: #CBD5E1;">Progress:</span>
-        <div style="width: 100%; background-color: #0F3732; border-radius: 10px; height: 40px; margin-top: 10px; overflow: hidden; border: 1px solid #1A5A52;">
+        <div style="display: flex; width: 100%; background-color: #0F3732; border-radius: 10px; height: 40px; margin-top: 10px; overflow: hidden; border: 1px solid #1A5A52;">
           <div style="width: ${progressPercent}%; background-color: #4FD1C5; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; color: #134942;">
             ${progressPercent.toFixed(1)}%
           </div>
