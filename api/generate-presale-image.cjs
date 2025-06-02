@@ -85,9 +85,27 @@ module.exports = async (req, res) => {
   try {
     await ensureModulesLoaded();
     const { publicClient: client } = getServerConfig();
-    const { PRESALE_ABI } = PRESALE_ABI_MODULE;
-    const { ERC20_MINIMAL_ABI } = ERC20_ABI_MODULE;
-    const { PRESALE_FACTORY_ABI } = PRESALE_FACTORY_ABI_MODULE;
+
+    // Robustly access ABI arrays, accounting for potential 'default' export
+    const presaleAbiModuleResolved =
+      PRESALE_ABI_MODULE.default || PRESALE_ABI_MODULE;
+    const erc20AbiModuleResolved = ERC20_ABI_MODULE.default || ERC20_ABI_MODULE;
+    const presaleFactoryAbiModuleResolved =
+      PRESALE_FACTORY_ABI_MODULE.default || PRESALE_FACTORY_ABI_MODULE;
+
+    const { PRESALE_ABI } = presaleAbiModuleResolved;
+    const { ERC20_MINIMAL_ABI } = erc20AbiModuleResolved;
+    const { PRESALE_FACTORY_ABI } = presaleFactoryAbiModuleResolved;
+
+    if (!PRESALE_ABI || !ERC20_MINIMAL_ABI || !PRESALE_FACTORY_ABI) {
+      console.error(
+        "[GenerateImage] Critical: One or more ABIs failed to load correctly.",
+        { PRESALE_ABI_MODULE, ERC20_ABI_MODULE, PRESALE_FACTORY_ABI_MODULE }
+      );
+      throw new Error(
+        "ABI loading failed for image generation. Check module exports and paths."
+      );
+    }
 
     const presaleAddress = req.query.address;
     if (!presaleAddress || !isAddress(presaleAddress)) {
