@@ -10,7 +10,6 @@ const { sepolia } = require("viem/chains");
 const fs = require("fs");
 const path = require("path");
 const satori = require("satori").default;
-const { html: satoriHtml } = require("satori-html");
 const sharp = require("sharp");
 const { put: vercelBlobPut } = require("@vercel/blob");
 
@@ -31,6 +30,7 @@ const DEFAULT_FALLBACK_IMAGE_URL = `${APP_URL}/logo.png`;
 let PRESALE_ABI_MODULE;
 let ERC20_ABI_MODULE;
 let PRESALE_FACTORY_ABI_MODULE;
+let satoriHtmlModuleInstance;
 
 async function ensureModulesLoaded() {
   if (!PRESALE_ABI_MODULE)
@@ -41,6 +41,9 @@ async function ensureModulesLoaded() {
     PRESALE_FACTORY_ABI_MODULE = await import(
       "../src/abis/cjs/PresaleFactoryABI.cjs"
     );
+  if (!satoriHtmlModuleInstance) {
+    satoriHtmlModuleInstance = await import("satori-html");
+  }
 }
 
 let publicClient;
@@ -85,6 +88,7 @@ async function getFontData(fontPath) {
 module.exports = async (req, res) => {
   try {
     await ensureModulesLoaded();
+    const { html: satoriHtml } = satoriHtmlModuleInstance; // Get the html function from the loaded module
     const { publicClient: client } = getServerConfig();
 
     // Robustly access ABI arrays, accounting for potential 'default' export
