@@ -332,7 +332,7 @@ module.exports = async (req, res) => {
 
     const metaTags = `
   <meta name="fc:frame" content="${escapeForHtml(frameMeta)}" />
-  <meta property="fc:frame:image:aspect_ratio" content="1.91:1" />
+  
   <meta property="og:title" content="${
     frameData.tokenSymbol
   } Presale on Raize" />
