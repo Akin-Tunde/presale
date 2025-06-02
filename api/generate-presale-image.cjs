@@ -10,6 +10,7 @@ const { sepolia } = require("viem/chains");
 const fs = require("fs");
 const path = require("path");
 const satori = require("satori").default;
+const { html: satoriHtml } = require("satori-html");
 const sharp = require("sharp");
 const { put: vercelBlobPut } = require("@vercel/blob");
 
@@ -235,31 +236,22 @@ module.exports = async (req, res) => {
     }
 
     // --- Generate SVG with Satori ---
-    const svg = await satori(
-      // If 'html' is an HTML string, use dangerouslySetInnerHTML
-      // to ensure Satori parses and renders it as HTML elements.
-      {
-        type: "div",
-        props: {
-          style: { display: "flex", width: "100%", height: "100%" }, // Ensure the root div takes full space
-          dangerouslySetInnerHTML: { __html: html },
+    // Convert the HTML string to Satori's VNode structure
+    const satoriElementTree = satoriHtml(html);
+    const svg = await satori(satoriElementTree, {
+      width: 1200,
+      height: 630,
+      fonts: [
+        {
+          name: "Inter",
+          data: interRegularFont,
+          weight: 400,
+          style: "normal",
         },
-      },
-      {
-        width: 1200,
-        height: 630,
-        fonts: [
-          {
-            name: "Inter",
-            data: interRegularFont,
-            weight: 400,
-            style: "normal",
-          },
-          { name: "Inter", data: interBoldFont, weight: 700, style: "normal" },
-          // Add Poppins if used in template
-        ],
-      }
-    );
+        { name: "Inter", data: interBoldFont, weight: 700, style: "normal" },
+        // Add Poppins if used in template
+      ],
+    });
 
     // --- Convert SVG to PNG with Sharp ---
     const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();

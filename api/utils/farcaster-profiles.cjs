@@ -88,9 +88,10 @@ async function fetchFarcasterProfilesByAddresses(addresses) {
   // Fetch from Neynar API if there are any addresses not in cache
   if (addressesToFetchFromAPI.length > 0) {
     try {
-      const result = await neynarClient.fetchBulkUsersByEthOrSolAddress(
-        addressesToFetchFromAPI
-      );
+      const result = await neynarClient.fetchBulkUsersByEthOrSolAddress({
+        addresses: addressesToFetchFromAPI,
+        // You can also pass viewerFid here if needed, e.g., viewerFid: someFid,
+      });
 
       Object.entries(result).forEach(([address, users]) => {
         const normalizedAddr = getAddress(address);
