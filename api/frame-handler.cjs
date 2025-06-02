@@ -7,10 +7,12 @@ const { createClient } = require("@supabase/supabase-js");
 // --- Environment Variables ---
 const SUPABASE_URL = process.env.VITE_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.VITE_PUBLIC_SUPABASE_ANON_KEY;
-const APP_URL = process.env.APP_URL || "https://presale-umber-phi.vercel.app/"; // Base URL of your frontend app
+const APP_URL = process.env.APP_URL || "https://presale-umber-phi.vercel.app/";
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-  console.warn("[Frame Handler] Supabase URL or Anon Key missing. Cannot fetch presale details.");
+  console.warn(
+    "[Frame Handler] Supabase URL or Anon Key missing. Cannot fetch presale details."
+  );
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -22,22 +24,27 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 async function getPresaleFrameData(presaleAddress) {
   console.log(`[Frame Handler] Fetching data for presale: ${presaleAddress}`);
   if (!supabase) {
-      return { error: "Supabase client not initialized." };
+    return { error: "Supabase client not initialized." };
   }
   try {
     // Example: Fetching from Supabase (adjust table/columns as needed)
     const { data, error } = await supabase
       .from("presales") // Your presales table name
-      .select("token_symbol, image_url, presale_rate, hard_cap, currency_symbol, status_text") // Select fields needed for the frame
+      .select(
+        "token_symbol, image_url, presale_rate, hard_cap, currency_symbol, status_text"
+      ) // Select fields needed for the frame
       .eq("presale_address", getAddress(presaleAddress)) // Adjust column name if needed
       .single();
 
     if (error) {
-      console.error(`[Frame Handler] Supabase error fetching presale ${presaleAddress}:`, error);
+      console.error(
+        `[Frame Handler] Supabase error fetching presale ${presaleAddress}:`,
+        error
+      );
       return { error: `Presale not found or DB error: ${error.message}` };
     }
     if (!data) {
-        return { error: "Presale not found." };
+      return { error: "Presale not found." };
     }
 
     // TODO: Add logic to fetch current status (e.g., active, ended, success, failed)
@@ -51,7 +58,10 @@ async function getPresaleFrameData(presaleAddress) {
       // Add more data as needed for frame buttons/text
     };
   } catch (err) {
-    console.error(`[Frame Handler] Exception fetching presale ${presaleAddress}:`, err);
+    console.error(
+      `[Frame Handler] Exception fetching presale ${presaleAddress}:`,
+      err
+    );
     return { error: `Server error fetching presale data: ${err.message}` };
   }
 }
@@ -72,27 +82,35 @@ module.exports = async (req, res) => {
 
     // Fetch the base index.html file
     // In Vercel, the built frontend files are usually in the parent directory
-    const indexPath = path.resolve(process.cwd(), ".next/server/pages/index.html"); // Adjust path for Vite/Next.js if needed
+    const indexPath = path.resolve(
+      process.cwd(),
+      ".next/server/pages/index.html"
+    ); // Adjust path for Vite/Next.js if needed
     let htmlContent;
     try {
-        htmlContent = fs.readFileSync(indexPath, "utf8");
+      htmlContent = fs.readFileSync(indexPath, "utf8");
     } catch (fsError) {
-        // Fallback path for local dev or different build structures
-        const fallbackPath = path.resolve(process.cwd(), "dist/index.html"); // Common path for Vite builds
-         try {
-             htmlContent = fs.readFileSync(fallbackPath, "utf8");
-         } catch (fallbackError) {
-            console.error("[Frame Handler] Error reading index.html:", fsError, fallbackError);
-            return res.status(500).send("Error reading application template");
-         }
+      // Fallback path for local dev or different build structures
+      const fallbackPath = path.resolve(process.cwd(), "dist/index.html"); // Common path for Vite builds
+      try {
+        htmlContent = fs.readFileSync(fallbackPath, "utf8");
+      } catch (fallbackError) {
+        console.error(
+          "[Frame Handler] Error reading index.html:",
+          fsError,
+          fallbackError
+        );
+        return res.status(500).send("Error reading application template");
+      }
     }
-
 
     // Fetch dynamic data for the frame
     const frameData = await getPresaleFrameData(presaleAddress);
 
     if (frameData.error) {
-      console.warn(`[Frame Handler] Data fetch error for ${presaleAddress}: ${frameData.error}`);
+      console.warn(
+        `[Frame Handler] Data fetch error for ${presaleAddress}: ${frameData.error}`
+      );
       // Optionally, serve default frame tags or just the unmodified HTML
       // For simplicity, we might just serve the base HTML on error
       res.setHeader("Content-Type", "text/html");
@@ -114,19 +132,29 @@ module.exports = async (req, res) => {
       <meta property="fc:frame:button:1:action" content="link" />
       <meta property="fc:frame:button:1:target" content="${pageUrl}" />
 
-      ${frameData.status === "Active" ? `
+      ${
+        frameData.status === "Active"
+          ? `
       <meta property="fc:frame:button:2" content="Contribute Now" />
       <meta property="fc:frame:button:2:action" content="link" />
       <meta property="fc:frame:button:2:target" content="${pageUrl}" /> 
-      ` : ''}
-      ${frameData.status === "Success" ? `
+      `
+          : ""
+      }
+      ${
+        frameData.status === "Success"
+          ? `
       <meta property="fc:frame:button:2" content="Claim Tokens" />
       <meta property="fc:frame:button:2:action" content="link" />
       <meta property="fc:frame:button:2:target" content="${pageUrl}" /> 
-      ` : ''}
+      `
+          : ""
+      }
       
       <meta property="og:title" content="${frameData.tokenSymbol} Presale" />
-      <meta property="og:description" content="Join the ${frameData.tokenSymbol} presale! Status: ${frameData.status}" />
+      <meta property="og:description" content="Join the ${
+        frameData.tokenSymbol
+      } presale! Status: ${frameData.status}" />
       <meta property="og:image" content="${frameData.imageUrl}" />
     `;
 
@@ -135,10 +163,8 @@ module.exports = async (req, res) => {
 
     res.setHeader("Content-Type", "text/html");
     return res.status(200).send(modifiedHtml);
-
   } catch (error) {
     console.error("[Frame Handler] General error:", error);
     return res.status(500).send(`Server error: ${error.message}`);
   }
 };
-

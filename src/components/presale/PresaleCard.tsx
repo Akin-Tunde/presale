@@ -221,13 +221,15 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
   };
 
   // Share URLs and Text
-  const appUrl = "https://presale-umber-phi.vercel.app/"; // Consider making this an env variable
+  const appUrl = "https://presale-umber-phi.vercel.app/";
   const presalePageUrl = `${appUrl}/presale/${presaleAddress}`;
 
   // Create share text with presale name and token details
-  const shareText = `Check out this presale on Raize: ${
+  const shareText = `Check out ${
     tokenSymbol || "Token"
-  } (${currencyDisplaySymbol}) - Ends: ${formatDate(endTime)}`;
+  } (${currencyDisplaySymbol}) presale on Raize: - Ends: ${formatDate(
+    endTime
+  )}`;
 
   // Create Twitter share URL
   const twitterShareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(
@@ -421,4 +423,3 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
 };
 
 export default PresaleCard;
-
