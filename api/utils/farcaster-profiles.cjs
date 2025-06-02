@@ -88,7 +88,7 @@ async function fetchFarcasterProfilesByAddresses(addresses) {
   // Fetch from Neynar API if there are any addresses not in cache
   if (addressesToFetchFromAPI.length > 0) {
     try {
-      const result = await neynarClient.fetchBulkUsersByEthereumAddress(
+      const result = await neynarClient.fetchBulkUsersByEthOrSolAddress(
         addressesToFetchFromAPI
       );
 
