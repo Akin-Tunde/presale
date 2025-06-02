@@ -40,7 +40,7 @@ if (!NEYNAR_API_KEY) {
   }
 }
 
-const profileCache = new Map(); // Simple in-memory cache for the lifetime of the function invocation
+const profileCache = new Map();
 
 /**
  * @typedef {object} FarcasterUserProfile
@@ -113,8 +113,32 @@ async function fetchFarcasterProfilesByAddresses(addresses) {
         "[FarcasterProfilesUtil] Error fetching profiles from Neynar:",
         error
       );
+      // Ensure fallback profiles are created for addresses that were attempted in the failed API call
+      addressesToFetchFromAPI.forEach((addr) => {
+        const normalizedAddr = getAddress(addr); // Normalize for consistent keying
+        if (!profilesToReturn[normalizedAddr]) {
+          profilesToReturn[normalizedAddr] = {
+            custodyAddress: normalizedAddr,
+            username: null,
+            displayName: null,
+            pfpUrl: null,
+          };
+        }
+      });
     }
   }
+
+  validAddresses.forEach((addr) => {
+    if (!profilesToReturn[addr]) {
+      // addr is already normalized from the start of the function
+      profilesToReturn[addr] = {
+        custodyAddress: addr,
+        username: null,
+        displayName: null,
+        pfpUrl: null,
+      };
+    }
+  });
   return profilesToReturn;
 }
 

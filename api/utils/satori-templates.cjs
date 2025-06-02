@@ -42,7 +42,7 @@ function getPresaleImageHtml(data) {
       </div>
 
       <!-- Progress Bar -->
-      <div style="margin-bottom: 15px;">
+      <div style="display: flex; flex-direction: column; margin-bottom: 15px;">
         <span style="font-size: 28px; color: #CBD5E1;">Progress:</span>
         <div style="width: 100%; background-color: #0F3732; border-radius: 10px; height: 40px; margin-top: 10px; overflow: hidden; border: 1px solid #1A5A52;">
           <div style="width: ${progressPercent}%; background-color: #4FD1C5; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 20px; color: #134942;">
@@ -56,7 +56,7 @@ function getPresaleImageHtml(data) {
       </div>
 
       <!-- Contributors Section -->
-      <div style="margin-top: 30px; border-top: 1px solid #1A5A52; padding-top: 20px;">
+      <div style="display: flex; flex-direction: column; margin-top: 30px; border-top: 1px solid #1A5A52; padding-top: 20px;">
         <span style="font-size: 28px; font-weight: bold; color: #CBD5E1; margin-bottom: 15px; display: block;">Recent Contributors:</span>
         <div style="display: flex; flex-wrap: wrap; gap: 15px;">
           ${
@@ -90,25 +90,3 @@ function getPresaleImageHtml(data) {
 }
 
 module.exports = { getPresaleImageHtml };
-
-/*
-Tailwind classes for reference if designing outside Satori first:
-Root: flex flex-col w-[1200px] h-[630px] bg-primary-900 text-white p-10 font-sans border-2 border-primary-700 rounded-lg
-Header: flex items-center mb-8
-Creator PFP: w-20 h-20 rounded-full mr-5 border-2 border-neutral-light
-Creator Text Div: flex flex-col
-Creator Username: text-4xl font-bold text-neutral-dark
-Token Symbol: text-5xl font-bold text-neutral-light
-Raize Logo: w-24 h-24 ml-auto
-Progress Title: text-3xl text-neutral-dark
-Progress Bar Container: w-full bg-primary-800 rounded-lg h-10 mt-2 overflow-hidden border border-primary-700
-Progress Bar Fill: bg-accent h-full flex items-center justify-center font-bold text-xl text-primary-900
-Progress Text Div: flex justify-between mt-2
-Progress Text: text-2xl text-neutral
-Contributors Title: text-3xl font-bold text-neutral-dark mb-4 block
-Contributors Container: flex flex-wrap gap-4
-Contributor Item: flex items-center bg-primary-700 px-3 py-2 rounded-full
-Contributor PFP: w-8 h-8 rounded-full mr-2
-Contributor Username: text-xl text-neutral
-Footer: mt-auto text-center text-xl text-neutral-dark
-*/
