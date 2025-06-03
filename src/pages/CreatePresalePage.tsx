@@ -15,9 +15,15 @@ import { factoryAbi } from "@/abis/factoryAbi";
 import { erc20Abi } from "@/abis/ERC20ABI";
 
 // Configuration
-const FACTORY_ADDRESS = "0x7b676709cBF74bD668F380c2434aF18c4F75934f";
-const WETH_ADDRESS = "0xfff9976782d46cc05630d1f6ebab18b2324d6b14";
-const UNISWAP_V2_ROUTER = "0xeE567Fe1712Faf6149d80dA1E6934E354124CfE3";
+const FACTORY_ADDRESS =
+  import.meta.env.VITE_PRESALE_FACTORY_ADDRESS ||
+  "0x75E53c46d8CDF6e050A368ae24CFF267B025535c";
+const WETH_ADDRESS =
+  import.meta.env.VITE_WETH_ADDRESS ||
+  "0x4200000000000000000000000000000000000006";
+const UNISWAP_V2_ROUTER =
+  import.meta.env.VITE_UNISWAP_ROUTER_ADDRESS ||
+  "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24";
 
 // Helper Functions
 const formatDateForInput = (date: Date | null | undefined): string => {
