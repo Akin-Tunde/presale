@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { config } from "@/lib/wagmiConfig";
 // ABIs
 import { factoryAbi } from "@/abis/factoryAbi";
+
 const erc20Abi = [
   {
     constant: true,
@@ -252,16 +253,11 @@ const erc20Abi = [
     ],
   },
 ];
+
 // Configuration
-const FACTORY_ADDRESS =
-  import.meta.env.VITE_PRESALE_FACTORY_ADDRESS ||
-  "0x75E53c46d8CDF6e050A368ae24CFF267B025535c";
-const WETH_ADDRESS =
-  import.meta.env.VITE_WETH_ADDRESS ||
-  "0x4200000000000000000000000000000000000006";
-const UNISWAP_V2_ROUTER =
-  import.meta.env.VITE_UNISWAP_ROUTER_ADDRESS ||
-  "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24";
+const FACTORY_ADDRESS = "0x75E53c46d8CDF6e050A368ae24CFF267B025535c";
+const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
+const UNISWAP_V2_ROUTER = "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24";
 
 // Helper Functions
 const formatDateForInput = (date: Date | null | undefined): string => {
@@ -630,7 +626,7 @@ const CreatePresalePage: React.FC = () => {
     }
     return true;
   };
-
+  //calculateTotalTokensNeededForPresale
   const calculateAndSetTokenDeposit = useCallback(async () => {
     if (!formData.tokenAddress || !isValidAddress(formData.tokenAddress)) {
       setTokenDeposit("0");
