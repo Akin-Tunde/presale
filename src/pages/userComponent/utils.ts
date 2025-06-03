@@ -1,4 +1,4 @@
-import { type PresaleStatusReturn } from "@/lib/utils";
+// import { type PresaleStatusReturn } from "@/lib/utils";
 
 export const ensureString = (value: any, fallback: string = "N/A"): string => {
   if (typeof value === "string") return value;
@@ -23,17 +23,14 @@ export const shortenAddress = (address: string | undefined | null): string => {
 
 export const formatTimestamp = (
   timestamp: bigint | number | undefined,
-  fieldName?: string
+  fieldName?: string,
+  state?: number // <-- add state as a separate argument
 ): string => {
   if (timestamp === undefined || timestamp === null) return "N/A";
   try {
     const numTimestamp = BigInt(timestamp);
     if (numTimestamp === 0n) {
-      if (
-        fieldName === "startTime" &&
-        (currentPresaleOptionsForTimestampContext?.state === 0 ||
-          currentPresaleOptionsForTimestampContext?.state === undefined)
-      )
+      if (fieldName === "startTime" && (state === 0 || state === undefined))
         return "Not Started Yet";
       return "Not Set";
     }
