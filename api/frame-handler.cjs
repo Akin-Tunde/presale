@@ -6,13 +6,13 @@ const {
   formatUnits,
 } = require("viem");
 
-const { sepolia } = require("viem/chains");
+const { base } = require("viem/chains");
 const fs = require("fs");
 const path = require("path");
 
 // --- Environment Variables ---
 // const ALCHEMY_API_KEY = process.env.RAIZE_ALCHEMY_API_KEY;
-const CHAIN_RPC_URL = process.env.VITE_SEPOLIA_RPC_URL;
+const CHAIN_RPC_URL = process.env.VITE_BASE_MAINNET_RPC_URL;
 const PRESALE_FACTORY_ADDRESS = process.env.VITE_PRESALE_FACTORY_ADDRESS;
 const APP_URL = process.env.APP_URL || "https://raize-taupe.vercel.app";
 
@@ -50,7 +50,7 @@ function getServerConfig() {
 
   if (!publicClient) {
     publicClient = createPublicClient({
-      chain: sepolia,
+      chain: base,
       transport: http(CHAIN_RPC_URL),
     });
   }

@@ -6,7 +6,7 @@ const {
   http,
   formatUnits,
 } = require("viem");
-const { sepolia } = require("viem/chains");
+const { base } = require("viem/chains");
 const fs = require("fs");
 const path = require("path");
 const satori = require("satori").default;
@@ -17,9 +17,10 @@ const {
   fetchFarcasterProfilesByAddresses,
 } = require("./utils/farcaster-profiles.cjs");
 const { getPresaleImageHtml } = require("./utils/satori-templates.cjs");
+const { base58 } = require("ethers/lib/utils");
 
 // --- Environment Variables ---
-const CHAIN_RPC_URL = process.env.VITE_SEPOLIA_RPC_URL;
+const CHAIN_RPC_URL = process.env.VITE_BASE_MAINNET_RPC_URL;
 const PRESALE_FACTORY_ADDRESS = process.env.VITE_PRESALE_FACTORY_ADDRESS;
 const APP_URL = process.env.APP_URL || "https://raize-taupe.vercel.app";
 const BLOB_READ_WRITE_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
@@ -55,7 +56,7 @@ function getServerConfig() {
   }
   if (!publicClient) {
     publicClient = createPublicClient({
-      chain: sepolia,
+      chain: base,
       transport: http(CHAIN_RPC_URL),
     });
   }
@@ -281,18 +282,3 @@ module.exports = async (req, res) => {
     });
   }
 };
-
-// Helper to parse the HTML string into a Satori-compatible element structure
-// This is a very basic parser. For complex HTML, a proper library might be needed.
-// However, Satori's satori-html package does this automatically if you pass HTML string directly.
-// For this example, we'll assume satori is called with the object structure.
-// If using satori-html, you can pass the HTML string directly to it.
-
-// The `satori` function expects a React-like element structure, not a raw HTML string.
-// The simplest way to use raw HTML is with `satori-html` or by manually constructing the object.
-// For this example, I'm wrapping the HTML string in a basic object structure that Satori expects.
-// The `html` variable in the satori call should be:
-// { type: 'div', props: { dangerouslySetInnerHTML: { __html: htmlStringFromTemplate }, style: { display: 'flex', width: '100%', height: '100%' } } }
-// Or, more robustly, parse the HTML into Satori's expected VNode structure.
-// For simplicity in this example, I'll adjust the satori call to reflect it expects an element.
-// The `getPresaleImageHtml` should return the content for the *main* div, and satori wraps it.
