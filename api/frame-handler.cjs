@@ -316,7 +316,7 @@ module.exports = async (req, res) => {
       imageAspectRatio: "3:2",
       postUrl: `${postUrl}?address=${presaleAddress}`,
       button: {
-        title: "Join Presale",
+        title: "Join this Presale",
         action: {
           type: "launch_frame",
           url: pageUrl,
