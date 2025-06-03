@@ -68,7 +68,7 @@ export async function sendPresaleNotification(
       "[Notification Service] Backend response to notification request:",
       JSON.stringify(responseBody, null, 2)
     );
-    
+
     // Show success toast
     toast.success(`Notification sent successfully`);
   } catch (error) {
@@ -91,9 +91,9 @@ export async function notifyPresaleCreated(
   totalSupply: string,
   endDate: string
 ): Promise<void> {
-  const appUrl = "https://presale-umber-phi.vercel.app/";
+  const appUrl = "https://raize-taupe.vercel.app";
   const targetUrl = `${appUrl}/presale/${presaleAddress}`;
-  
+
   const payload: NotificationPayload = {
     category: "presale-created",
     title: "New Presale Available!",
@@ -101,9 +101,9 @@ export async function notifyPresaleCreated(
     targetUrl,
     presaleAddress,
     tokenSymbol,
-    creatorAddress
+    creatorAddress,
   };
-  
+
   await sendPresaleNotification(payload);
 }
 
@@ -115,9 +115,9 @@ export async function notifyPresaleEnded(
   tokenSymbol: string,
   contributorAddresses: string[]
 ): Promise<void> {
-  const appUrl = "https://presale-umber-phi.vercel.app/";
+  const appUrl = "https://raize-taupe.vercel.app";
   const targetUrl = `${appUrl}/presale/${presaleAddress}`;
-  
+
   const payload: NotificationPayload = {
     category: "presale-ended",
     title: "Presale Ended",
@@ -125,8 +125,8 @@ export async function notifyPresaleEnded(
     targetUrl,
     presaleAddress,
     tokenSymbol,
-    contributorAddresses
+    contributorAddresses,
   };
-  
+
   await sendPresaleNotification(payload);
 }
