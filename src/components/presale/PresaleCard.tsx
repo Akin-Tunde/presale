@@ -421,4 +421,3 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
 };
 
 export default PresaleCard;
-

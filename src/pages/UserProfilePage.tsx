@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { AlertCircle, Info, RefreshCw, ArrowLeft, Fuel } from "lucide-react";
+import { AlertCircle, Info, RefreshCw, ArrowLeft, Fuel, Lock, Clock } from "lucide-react"; // Added Lock and Clock icons
 import { Link } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +14,7 @@ import { type Abi, encodeFunctionData, type Address, formatUnits, isHex, zeroAdd
 import PresaleFactoryJson from "@/abis/PresaleFactory.json";
 import PresaleJson from "@/abis/Presale.json";
 import VestingJson from "@/abis/Vesting.json";
+import LiquidityLockerJson from "@/abis/LiquidityLocker.json"; // Added LiquidityLocker ABI import
 import { getPresaleStatus, cn, type PresaleStatusReturn, formatTokenAmount } from "@/lib/utils";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +25,10 @@ import { FarcasterProfileSDKDisplay } from "@/components/FarcasterProfileSDKDisp
 const factoryAbi = PresaleFactoryJson.abi as Abi;
 const presaleAbi = PresaleJson.abi as Abi;
 const vestingAbi = VestingJson.abi as Abi;
+const liquidityLockerAbi = LiquidityLockerJson.abi as Abi; // Added LiquidityLocker ABI
 const factoryAddress = import.meta.env.VITE_PRESALE_FACTORY_ADDRESS as Address;
-const vestingAddress = import.meta.env.VITE_VESTING_CONTRACT_ADDRESS as Address;// Fallback address, should be replaced with actual address
+const vestingAddress = import.meta.env.VITE_VESTING_ADDRESS as Address;// Fallback address, should be replaced with actual address
+const liquidityLockerAddress = import.meta.env.VITE_LIQUIDITY_LOCKER_ADDRESS as Address; // Added LiquidityLocker address (replace with actual)
 
 const ensureString = (value: any, fallback: string = "N/A"): string => {
     if (typeof value === "string") return value;
@@ -274,73 +277,39 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
                 functionName: functionName,
                 args: args,
             });
+            toast.info(`Sending ${actionName} Transaction...`);
         } catch (err: any) {
-            const originalErrorMessage = err.shortMessage || err.message;
-            const detailedErrorText = ensureString(originalErrorMessage, `An unknown error occurred during ${actionName}.`);
-
-            if (functionName === "finalize" &&
-                (
-                    (typeof originalErrorMessage === 'string' && (
-                        originalErrorMessage.includes("User denied transaction signature") ||
-                        originalErrorMessage.includes("User rejected the request")
-                    )) ||
-                    err.code === 4001 || // Standard EIP-1193 User Rejected Request
-                    (err.cause && typeof err.cause === 'object' && (err.cause as any).code === 4001) // Wrapped EIP-1193
-                )
-            ) {
-                toast.error("User cancel the finalize");
-                setActionError("User cancel the finalize");
-            } else if (functionName === "refund" &&
-                (
-                    (typeof originalErrorMessage === 'string' && (
-                        originalErrorMessage.includes("User denied transaction signature") ||
-                        originalErrorMessage.includes("User rejected the request")
-                    )) ||
-                    err.code === 4001 || // Standard EIP-1193 User Rejected Request
-                    (err.cause && typeof err.cause === 'object' && (err.cause as any).code === 4001) // Wrapped EIP-1193
-                )
-            ) {
-                toast.error("user reject refund");
-                setActionError("user reject refund");
-            } else {
-                toast.error(`${actionName} Failed`, { description: detailedErrorText });
-                setActionError(detailedErrorText);
-            }
-            console.error(`${actionName} error details:`, err); // Log the full error for debugging
+            const msg = ensureString(err, `${actionName} failed.`);
+            setActionError(msg);
+            toast.error(`${actionName} Failed`, { description: msg });
         }
     };
 
-    const formatCurrencyDisplay = (value: bigint | undefined, decimals: number | undefined, symbol: string): string => {
-        if (value === undefined) return "N/A";
-        if (decimals !== undefined) {
-            return `${formatUnits(value, decimals)} ${symbol}`;
+    const handleExtendClaim = () => {
+        if (!inputValue || BigInt(inputValue) <= 0) {
+            setActionError("Please enter a valid positive number of seconds to extend the deadline.");
+            return;
         }
-        if (symbol !== "ETH" && value === 0n) return `0 ${symbol}`;
-        if (symbol !== "ETH") return `${ensureString(value)} raw units (${symbol} details pending)`;
-        return `${ensureString(value)} raw units`;
+        handleCreatorAction("extendClaimDeadline", [BigInt(inputValue)], "Extend Claim Deadline");
     };
 
     return (
         <Card>
             <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                    <CardTitle className="text-base font-medium">
-                        <Badge variant={presaleStatus.variant} className="mr-2">{ensureString(presaleStatus.text, "Status N/A")}</Badge> 
-                        {presaleTokenSymbol ? `${presaleTokenSymbol} Presale` : "Presale"}
-                    </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={() => refetchDetails()} disabled={isWritePending || isConfirming || isLoadingDetails || isLoadingAdditionalData} className="h-6 w-6 self-end sm:self-center"><RefreshCw className={`h-3 w-3 ${isWritePending || isConfirming || isLoadingDetails || isLoadingAdditionalData ? "animate-spin" : ""}`} /></Button>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
+                    <CardTitle className="text-sm font-medium">{presaleTokenSymbol ? `${presaleTokenSymbol} Presale` : "Presale"}: {shortenAddress(presaleAddress)}</CardTitle>
+                    <Badge variant={presaleStatus.variant} className="text-xs self-start sm:self-center">{ensureString(presaleStatus.text, "Status N/A")}</Badge>
                 </div>
-                <CardDescription className="text-xs font-mono break-all pt-1">{ensureString(presaleAddress)}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground mb-3 pt-2 border-t border-border">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border">
                     <div>
                         <p className="font-medium text-foreground">Soft Cap:</p>
-                        <p>{formatCurrencyDisplay(softCap, paymentDecimalsToUse, paymentSymbolToUse)}</p>
+                        <p>{formatTokenAmount(softCap, paymentDecimalsToUse, paymentSymbolToUse)}</p>
                     </div>
                     <div>
                         <p className="font-medium text-foreground">Total Raised:</p>
-                        <p>{formatCurrencyDisplay(totalContributed, paymentDecimalsToUse, paymentSymbolToUse)}</p>
+                        <p>{formatTokenAmount(totalContributed, paymentDecimalsToUse, paymentSymbolToUse)}</p>
                     </div>
                     <div>
                         <p className="font-medium text-foreground">Start Time:</p>
@@ -350,49 +319,61 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({ presaleAddress,
                         <p className="font-medium text-foreground">End Time:</p>
                         <p>{formatTimestamp(endTime, "endTime")}</p>
                     </div>
+                    <div>
+                        <p className="font-medium text-foreground">Whitelist:</p>
+                        <p>{whitelistEnabled ? "Enabled" : "Disabled"}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">Status:</p>
+                        <p>{paused ? "Paused" : "Active"}</p>
+                    </div>
+                    <div>
+                        <p className="font-medium text-foreground">Owner Balance:</p>
+                        <p>{formatTokenAmount(ownerBalance, paymentDecimalsToUse, paymentSymbolToUse)}</p>
+                    </div>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" onClick={() => handleCreatorAction("finalize", [], "Finalize")} disabled={!canFinalize || isWritePending || isConfirming}>Finalize <EstimatedFeeDisplay fee={calculateFee(finalizeGas)} /></Button>
-                    <Button size="sm" variant="outline" onClick={() => handleCreatorAction("cancel", [], "Cancel")} disabled={!canCancel || isWritePending || isConfirming}>Cancel <EstimatedFeeDisplay fee={calculateFee(cancelGas)} /></Button>
-                    <Button size="sm" variant="outline" onClick={() => handleCreatorAction("withdraw", [], "Withdraw")} disabled={!canWithdraw || isWritePending || isConfirming}>Withdraw <EstimatedFeeDisplay fee={calculateFee(withdrawGas)} /></Button>
-                    {canWithdraw && ownerBalance !== undefined && ownerBalance > 0n && (
-                        <p className="text-xs text-muted-foreground self-center ml-2">
-                            Withdrawable: {formatCurrencyDisplay(ownerBalance, paymentDecimalsToUse, paymentSymbolToUse)}
-                        </p>
-                    )}
-                    {paused ? (
-                        <Button size="sm" variant="outline" onClick={() => handleCreatorAction("unpause", [], "Unpause")} disabled={!canPauseUnpause || isWritePending || isConfirming}>Unpause <EstimatedFeeDisplay fee={calculateFee(unpauseGas)} /></Button>
-                    ) : (
-                        <Button size="sm" variant="outline" onClick={() => handleCreatorAction("pause", [], "Pause")} disabled={!canPauseUnpause || isWritePending || isConfirming}>Pause <EstimatedFeeDisplay fee={calculateFee(pauseGas)} /></Button>
-                    )}
-                    <Button size="sm" variant="outline" onClick={() => handleCreatorAction("toggleWhitelist", [!(whitelistEnabled ?? false)], whitelistEnabled ? "Disable Whitelist" : "Enable Whitelist")} disabled={!canToggleWhitelist || isWritePending || isConfirming}>
-                        {whitelistEnabled ? "Disable Whitelist" : "Enable Whitelist"} <EstimatedFeeDisplay fee={calculateFee(toggleWhitelistGas)} />
-                    </Button>
-
-                    <Dialog open={dialogOpen === "extendClaim"} onOpenChange={(isOpen) => !isOpen && setDialogOpen(null)}>
+                <div className="flex flex-wrap gap-2 mt-2">
+                    <Button size="sm" onClick={() => handleCreatorAction("finalize", [], "Finalize")} disabled={!canFinalize || isWritePending || isConfirming}>Finalize<EstimatedFeeDisplay fee={calculateFee(finalizeGas)} /></Button>
+                    <Button size="sm" variant="destructive" onClick={() => handleCreatorAction("cancel", [], "Cancel")} disabled={!canCancel || isWritePending || isConfirming}>Cancel<EstimatedFeeDisplay fee={calculateFee(cancelGas)} /></Button>
+                    <Button size="sm" variant="secondary" onClick={() => handleCreatorAction("withdraw", [], "Withdraw")} disabled={!canWithdraw || isWritePending || isConfirming}>Withdraw<EstimatedFeeDisplay fee={calculateFee(withdrawGas)} /></Button>
+                    <Button size="sm" variant="outline" onClick={() => handleCreatorAction(paused ? "unpause" : "pause", [], paused ? "Unpause" : "Pause")} disabled={!canPauseUnpause || isWritePending || isConfirming}>{paused ? "Unpause" : "Pause"}<EstimatedFeeDisplay fee={calculateFee(paused ? unpauseGas : pauseGas)} /></Button>
+                    <Button size="sm" variant="outline" onClick={() => handleCreatorAction("toggleWhitelist", [!whitelistEnabled], whitelistEnabled ? "Disable Whitelist" : "Enable Whitelist")} disabled={!canToggleWhitelist || isWritePending || isConfirming}>{whitelistEnabled ? "Disable WL" : "Enable WL"}<EstimatedFeeDisplay fee={calculateFee(toggleWhitelistGas)} /></Button>
+                    
+                    <Dialog open={dialogOpen === "extendClaim"} onOpenChange={(open) => setDialogOpen(open ? "extendClaim" : null)}>
                         <DialogTrigger asChild>
-                            <Button size="sm" variant="outline" onClick={() => setDialogOpen("extendClaim")} disabled={!canExtendClaim || isWritePending || isConfirming}>Extend Claim</Button>
+                            <Button size="sm" variant="outline" disabled={!canExtendClaim || isWritePending || isConfirming}>Extend Claim</Button>
                         </DialogTrigger>
                         <DialogContent>
-                            <DialogHeader><DialogTitle>Extend Claim Deadline</DialogTitle></DialogHeader>
-                            <Label htmlFor="extendTime">New Claim End Time (Unix Timestamp)</Label>
-                            <Input id="extendTime" type="number" placeholder="e.g., 1735689600" value={inputValue} onChange={(e) => setInputValue(e.target.value)} />
-                            <EstimatedFeeDisplay fee={calculateFee(extendClaimGas)} />
+                            <DialogHeader>
+                                <DialogTitle>Extend Claim Deadline</DialogTitle>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid grid-cols-4 items-center gap-4">
+                                    <Label htmlFor="extendSeconds" className="text-right">
+                                        Seconds
+                                    </Label>
+                                    <Input 
+                                        id="extendSeconds" 
+                                        type="number" 
+                                        value={inputValue} 
+                                        onChange={(e) => setInputValue(e.target.value)} 
+                                        className="col-span-3" 
+                                        placeholder="Enter additional seconds"
+                                    />
+                                </div>
+                            </div>
+                            {actionError && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(actionError)}</AlertDescription></Alert>}
                             <DialogFooter>
-                                <DialogClose asChild><Button variant="ghost">Cancel</Button></DialogClose>
-                                <Button onClick={() => handleCreatorAction("extendClaimDeadline", [BigInt(inputValue || "0")], "Extend Claim")} disabled={isWritePending || isConfirming || !inputValue || BigInt(inputValue || "0") <= (options?.[11] || 0n) || BigInt(inputValue || "0") <= nowSeconds }>
-                                    Confirm <EstimatedFeeDisplay 
-  fee={calculateFee(extendClaimGas)} 
- 
-/>
-
-                                </Button>
+                                <DialogClose asChild>
+                                    <Button type="button" variant="secondary">Cancel</Button>
+                                </DialogClose>
+                                <Button type="button" onClick={handleExtendClaim} disabled={isWritePending || isConfirming || !inputValue || BigInt(inputValue) <= 0}>Extend<EstimatedFeeDisplay fee={calculateFee(extendClaimGas)} /></Button>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
                 </div>
-                {actionError && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(actionError)}</AlertDescription></Alert>}
+                {actionError && dialogOpen !== "extendClaim" && <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(actionError)}</AlertDescription></Alert>}
                 {(isWritePending || isConfirming) && 
                     <Alert variant="default" className="mt-2">
                         <Info className="h-4 w-4" />
@@ -420,84 +401,63 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
     const { data: presaleInfo, isLoading: isLoadingPresaleInfo, refetch: refetchPresaleInfo, isError: isErrorInfoGeneralHook, error: errorInfoGeneralHook } = useReadContracts({
         allowFailure: true,
         contracts: [
-            { ...presaleContract, functionName: "options" },
-            { ...presaleContract, functionName: "state" },
-            { ...presaleContract, functionName: "contributions", args: [userAddress as Address] },
-            { ...presaleContract, functionName: "userClaimedAmount", args: [userAddress as Address] },
-            { ...presaleContract, functionName: "getTotalContributed" },
-            { ...presaleContract, functionName: "token" }, // Added to fetch the presale token address
+            { ...presaleContract, functionName: "options" },             // 0
+            { ...presaleContract, functionName: "state" },               // 1
+            { ...presaleContract, functionName: "contributions", args: [userAddress] }, // 2
+            { ...presaleContract, functionName: "claimedAmount", args: [userAddress] }, // 3
+            { ...presaleContract, functionName: "token" },               // 4 (Presale Token)
+            { ...presaleContract, functionName: "getTotalContributed" }, // 5
         ],
-        query: { enabled: !!userAddress && !!presaleAddress }
     });
 
     const optionsResult = presaleInfo?.[0];
     const stateResult = presaleInfo?.[1];
     const userContributionResult = presaleInfo?.[2];
     const userClaimedAmountResult = presaleInfo?.[3];
-    const totalContributedResult = presaleInfo?.[4]; 
-    const tokenAddressCallResultContributed = presaleInfo?.[5]; // Index for token() call
+    const presaleTokenResult = presaleInfo?.[4];
+    const totalContributedResult = presaleInfo?.[5];
 
     const options = optionsResult?.status === "success" ? optionsResult.result as any[] : undefined;
-    currentPresaleOptionsForTimestampContext = { state: stateResult?.status === "success" ? stateResult.result : undefined };
     const state = stateResult?.status === "success" ? stateResult.result as number : undefined;
-    
-    let userContributionRaw: bigint | undefined = undefined;
-    if (userContributionResult?.status === "success") {
-        if (userContributionResult.result === null || (isHex(userContributionResult.result) && userContributionResult.result === "0x")) {
-            userContributionRaw = 0n;
-        } else {
-            userContributionRaw = userContributionResult.result as bigint;
-        }
-    }
-
-    let userClaimedAmountRaw: bigint | undefined = undefined;
-    if (userClaimedAmountResult?.status === "success") {
-        if (userClaimedAmountResult.result === null || (isHex(userClaimedAmountResult.result) && userClaimedAmountResult.result === "0x")) {
-            userClaimedAmountRaw = 0n;
-        } else {
-            userClaimedAmountRaw = userClaimedAmountResult.result as bigint;
-        }
-    }
-
-    let totalPresaleContributed: bigint | undefined = undefined;
-    if (totalContributedResult?.status === "success") {
-        if (totalContributedResult.result === null || (isHex(totalContributedResult.result) && totalContributedResult.result === "0x")) {
-            totalPresaleContributed = 0n;
-        } else {
-            totalPresaleContributed = totalContributedResult.result as bigint;
-        }
-    }
-
-    const presaleTokenAddressContributed = tokenAddressCallResultContributed?.status === "success" ? tokenAddressCallResultContributed.result as Address : undefined;
-    const paymentCurrencyAddress = options?.[15] as Address | undefined;
-    const isNativePaymentContribution = paymentCurrencyAddress === zeroAddress;
-
-    const softCap = options?.[2] as bigint | undefined;
-    const startTime = options?.[9] as bigint | undefined;
-    const endTime = options?.[10] as bigint | undefined;
+    const userContributionRaw = userContributionResult?.status === "success" ? userContributionResult.result as bigint : undefined;
+    const userClaimedAmountRaw = userClaimedAmountResult?.status === "success" ? userClaimedAmountResult.result as bigint : undefined;
+    const presaleTokenAddress = presaleTokenResult?.status === "success" ? presaleTokenResult.result as Address : undefined;
+    const totalPresaleContributed = totalContributedResult?.status === "success" ? totalContributedResult.result as bigint : undefined;
 
     const { data: presaleTokenDetails, isLoading: isLoadingPresaleTokenDetails } = useReadContracts({
         allowFailure: true,
         contracts: [
-            { address: presaleTokenAddressContributed, abi: erc20Abi, functionName: "decimals" },
-            { address: presaleTokenAddressContributed, abi: erc20Abi, functionName: "symbol" },
-        ]
+            { address: presaleTokenAddress, abi: erc20Abi, functionName: "symbol" },
+            { address: presaleTokenAddress, abi: erc20Abi, functionName: "decimals" },
+        ],
+        query: { enabled: !!presaleTokenAddress },
     });
-    const presaleTokenDecimals = presaleTokenDetails?.[0]?.status === "success" ? presaleTokenDetails[0].result as number : undefined;
-    const presaleTokenSymbol = presaleTokenDetails?.[1]?.status === "success" ? presaleTokenDetails[1].result as string : undefined;
+    const presaleTokenSymbol = presaleTokenDetails?.[0]?.status === "success" ? presaleTokenDetails[0].result as string : undefined;
+    const presaleTokenDecimals = presaleTokenDetails?.[1]?.status === "success" ? presaleTokenDetails[1].result as number : undefined;
+
+    const paymentCurrencyAddress = options?.[15] as Address | undefined;
+    const isNativePaymentContribution = paymentCurrencyAddress === zeroAddress;
 
     const { data: paymentCurrencyDetails, isLoading: isLoadingPaymentCurrencyDetails } = useReadContracts({
         allowFailure: true,
         contracts: [
+            { address: paymentCurrencyAddress, abi: erc20Abi, functionName: "symbol" },
             { address: paymentCurrencyAddress, abi: erc20Abi, functionName: "decimals" },
-            { address: paymentCurrencyAddress, abi: erc20Abi, functionName: "symbol" }
-        ]
+        ],
+        query: { enabled: !!paymentCurrencyAddress && !isNativePaymentContribution },
     });
+    const paymentCurrencySymbol = paymentCurrencyDetails?.[0]?.status === "success" ? paymentCurrencyDetails[0].result as string : undefined;
+    const paymentCurrencyDecimals = paymentCurrencyDetails?.[1]?.status === "success" ? paymentCurrencyDetails[1].result as number : undefined;
 
-    const paymentDecimalsForDisplay = isNativePaymentContribution ? 18 : (paymentCurrencyDetails?.[0]?.status === "success" ? paymentCurrencyDetails[0].result as number : undefined);
-    const paymentSymbolForDisplay = isNativePaymentContribution ? "ETH" : (paymentCurrencyDetails?.[1]?.status === "success" ? paymentCurrencyDetails[1].result as string : undefined) ?? (paymentDecimalsForDisplay !== undefined ? "Tokens" : "raw units");
+    const paymentDecimalsForDisplay = isNativePaymentContribution ? 18 : paymentCurrencyDecimals;
+    const paymentSymbolForDisplay = isNativePaymentContribution ? "ETH" : paymentCurrencySymbol ?? (paymentDecimalsForDisplay !== undefined ? "Tokens" : "raw units");
 
-    const presaleStatus: PresaleStatusReturn = (options !== undefined && state !== undefined) ? getPresaleStatus(state, options) : { text: "Loading...", variant: "default" };
+    const presaleDataAvailable = options !== undefined && state !== undefined;
+    const presaleStatus: PresaleStatusReturn = (presaleDataAvailable && state !== undefined && options !== undefined) ? getPresaleStatus(state, options) : { text: "Loading...", variant: "default" };
+
+    const softCap = options?.[2] as bigint | undefined;
+    const startTime = options?.[9] as bigint | undefined;
+    const endTime = options?.[10] as bigint | undefined;
 
     const canClaim = state === 3 && userContributionRaw !== undefined && userContributionRaw > 0n && 
                      (userClaimedAmountRaw !== undefined ? userClaimedAmountRaw < userContributionRaw : true); // Updated: Claim only possible in State 3 (Finalized/Success)
@@ -646,15 +606,25 @@ const ContributedPresaleCard: React.FC<ContributedPresaleCardProps> = ({ presale
 
 const UserProfilePage = () => {
     const { address, isConnected } = useAccount();
-    const { writeContractAsync } = useWriteContract();
-    const [vestingSchedules, setVestingSchedules] = useState<any[]>([]);
+    const { writeContractAsync } = useWriteContract(); // General write hook
+    
+    // State for Vesting
+    const [vestingSchedules, setVestingSchedules] = useState<any[]>([]); // Replace 'any' with a proper type
     const [isLoadingVestingSchedules, setIsLoadingVestingSchedules] = useState<boolean>(false);
     const [vestingClaimError, setVestingClaimError] = useState<string | null>(null);
-    const [vestingClaimPresaleAddress, setVestingClaimPresaleAddress] = useState<string | null>(null);
-    const [isVestingClaimPending, setIsVestingClaimPending] = useState<boolean>(false);
-    const [isVestingClaimConfirming, setIsVestingClaimConfirming] = useState<boolean>(false);
-    const [vestingClaimHash, setVestingClaimHash] = useState<string | null>(null);
-  
+    const [vestingClaimPresaleAddress, setVestingClaimPresaleAddress] = useState<Address | null>(null);
+    const { data: vestingClaimHash, isPending: isVestingClaimPending, reset: resetVestingClaimContract } = useWriteContract();
+    const { isLoading: isVestingClaimConfirming, isSuccess: isVestingClaimConfirmed } = useWaitForTransactionReceipt({ hash: vestingClaimHash });
+
+    // State for Liquidity Locker
+    const [liquidityLocks, setLiquidityLocks] = useState<any[]>([]); // Replace 'any' with a proper type
+    const [isLoadingLiquidityLocks, setIsLoadingLiquidityLocks] = useState<boolean>(false);
+    const [liquidityWithdrawError, setLiquidityWithdrawError] = useState<string | null>(null);
+    const [liquidityWithdrawLockId, setLiquidityWithdrawLockId] = useState<number | null>(null);
+    const { data: liquidityWithdrawHash, isPending: isLiquidityWithdrawPending, reset: resetLiquidityWithdrawContract } = useWriteContract();
+    const { isLoading: isLiquidityWithdrawConfirming, isSuccess: isLiquidityWithdrawConfirmed } = useWaitForTransactionReceipt({ hash: liquidityWithdrawHash });
+
+    // Fetching all presales from factory
     const { data: allPresalesFromFactory, isLoading: isLoadingAllPresales, refetch: refetchAllPresalesFromFactory, error: errorAllPresales } = useReadContract({
         abi: factoryAbi,
         address: factoryAddress,
@@ -665,6 +635,8 @@ const UserProfilePage = () => {
         }
     });
 
+    
+    // Filtering for presales created by the user
     const { data: createdPresalesData, isLoading: isLoadingCreated, refetch: refetchCreatedPresales, isError: isErrorCreatedHook, error: errorCreatedHook } = useReadContracts({
         contracts: allPresalesFromFactory?.map(presaleAddress => ({
             abi: presaleAbi,
@@ -682,6 +654,7 @@ const UserProfilePage = () => {
         }
     });
 
+    // Filtering for presales the user contributed to
     const { data: contributedPresalesAddresses, isLoading: isLoadingContributedAddresses, refetch: refetchContributedPresalesAddresses, isError: isErrorContributedAddressesHook, error: errorContributedAddressesHook } = useReadContracts({
         contracts: allPresalesFromFactory?.map(presaleAddress => ({
             abi: presaleAbi,
@@ -699,205 +672,162 @@ const UserProfilePage = () => {
             }
         }
     });
-    
-    // Fetch vesting contract address from factory (if applicable)
-    // const { data: vestingContractAddressFromFactory, isLoading: isLoadingVestingAddress } = useReadContract({
-    //     address: factoryAddress,
-    //     abi: factoryAbi,
-    //     functionName: "vestingContract", // Assuming this function exists
-    //     query: { enabled: isConnected && !!address }
-    // });
-    // const actualVestingAddress = vestingContractAddressFromFactory || vestingAddress; // Use factory address if available
-    const actualVestingAddress = vestingAddress; // Using env variable for now
+console.log("Contributed Presale Addresses:", contributedPresalesAddresses);
 
-    const refetchAllData = () => {
-        refetchAllPresalesFromFactory(); 
-        refetchCreatedPresales();
-        refetchContributedPresalesAddresses();
-        // Simulate loading vesting schedules
-        loadVestingSchedules();
-    }
-    
-    // Function to load vesting schedules
-    const loadVestingSchedules = async () => {
+    // --- Fetching Vesting Schedules --- 
+    // This is a simplified placeholder. A real implementation would likely need to:
+    // 1. Get a list of relevant presales (e.g., contributedPresalesAddresses)
+    // 2. Call the vesting contract's `schedules` function for each presale + user address
+    // 3. Potentially fetch token details (symbol, decimals) for each schedule
+    const fetchVestingSchedules = async () => {
         if (!address || !contributedPresalesAddresses || contributedPresalesAddresses.length === 0) {
             setVestingSchedules([]);
-            setIsLoadingVestingSchedules(false);
             return;
         }
-        
         setIsLoadingVestingSchedules(true);
-        
+        setVestingClaimError(null);
         try {
-            // Create contracts array for batch reading vesting schedules
-            const vestingScheduleContracts = contributedPresalesAddresses.map(presaleAddress => ({
-                address: actualVestingAddress,
-                abi: vestingAbi,
-                functionName: "schedules",
-                args: [presaleAddress, address]
+            // Placeholder: Simulate fetching data
+            await new Promise(resolve => setTimeout(resolve, 1000)); 
+            // In a real app, you would replace this with actual contract calls
+            // Example structure (needs actual data):
+            /*
+            const schedulesData = await Promise.all(contributedPresalesAddresses.map(async (presaleAddr) => {
+                // Call vesting contract's `schedules(presaleAddr, userAddress)`
+                // Call vesting contract's `vestedAmount(presaleAddr, userAddress)`
+                // Call vesting contract's `remainingVested(presaleAddr, userAddress)`
+                // Fetch token details (symbol, decimals) using schedule.tokenAddress
+                // Calculate progress, etc.
+                return { presaleAddress: presaleAddr, /* ... other schedule details * / };
             }));
-            
-            // Create contracts array for batch reading claimable amounts
-            const claimableAmountContracts = contributedPresalesAddresses.map(presaleAddress => ({
-                address: actualVestingAddress,
-                abi: vestingAbi,
-                functionName: "remainingVested",
-                args: [presaleAddress, address]
-            }));
-            
-            // Create contracts array for batch reading token addresses from presales
-            const tokenAddressContracts = contributedPresalesAddresses.map(presaleAddress => ({
-                address: presaleAddress,
-                abi: presaleAbi,
-                functionName: "token"
-            }));
-            
-            // Batch read all data
-            const [scheduleResults, claimableResults, tokenAddressResults] = await Promise.all([
-                fetch(`/api/readContracts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contracts: vestingScheduleContracts })
-                }).then(res => res.json()),
-                fetch(`/api/readContracts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contracts: claimableAmountContracts })
-                }).then(res => res.json()),
-                fetch(`/api/readContracts`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contracts: tokenAddressContracts })
-                }).then(res => res.json())
-            ]);
-            
-            // Process results into vesting schedules
-            const processedSchedules = scheduleResults.map((result: any, index: number) => {
-                if (result.status !== "success" || !result.result) return null;
-                
-                const schedule = result.result;
-                const claimable = claimableResults[index]?.status === "success" ? claimableResults[index].result : 0n;
-                const tokenAddress = tokenAddressResults[index]?.status === "success" ? tokenAddressResults[index].result : undefined;
-                
-                // Skip if no vesting schedule exists (totalAmount is 0)
-                if (!schedule || schedule.totalAmount === 0n) return null;
-                
-                // Calculate progress percentage
-                const totalAmount = BigInt(schedule.totalAmount || 0);
-                const releasedAmount = BigInt(schedule.releasedAmount || 0);
-                const progressPercentage = totalAmount > 0n 
-                    ? Math.min(100, Number((releasedAmount * 100n) / totalAmount))
-                    : 0;
-                
-                return {
-                    presaleAddress: contributedPresalesAddresses[index],
-                    tokenAddress,
-                    tokenSymbol: "TKN", // Will be fetched separately
-                    tokenDecimals: 18, // Will be fetched separately
-                    totalAmount,
-                    releasedAmount,
-                    claimableAmount: BigInt(claimable || 0),
-                    startTime: BigInt(schedule.start || 0),
-                    endTime: BigInt(schedule.start || 0) + BigInt(schedule.duration || 0),
-                    progressPercentage: progressPercentage.toString()
-                };
-            }).filter(Boolean);
-            
-            // Fetch token symbols and decimals for each schedule
-            const tokenInfoPromises = processedSchedules.map(async (schedule: any) => {
-                if (!schedule || !schedule.tokenAddress) return schedule;
-                
-                try {
-                    const [symbolResult, decimalsResult] = await Promise.all([
-                        fetch(`/api/readContract`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                address: schedule.tokenAddress,
-                                abi: erc20Abi,
-                                functionName: "symbol"
-                            })
-                        }).then(res => res.json()),
-                        fetch(`/api/readContract`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                address: schedule.tokenAddress,
-                                abi: erc20Abi,
-                                functionName: "decimals"
-                            })
-                        }).then(res => res.json())
-                    ]);
-                    
-                    return {
-                        ...schedule,
-                        tokenSymbol: symbolResult.status === "success" ? symbolResult.result : "TKN",
-                        tokenDecimals: decimalsResult.status === "success" ? decimalsResult.result : 18
-                    };
-                } catch (error) {
-                    console.error("Error fetching token info:", error);
-                    return schedule;
-                }
-            });
-            
-            const finalSchedules = await Promise.all(tokenInfoPromises);
-            setVestingSchedules(finalSchedules);
+            setVestingSchedules(schedulesData.filter(s => s !== null)); // Filter out nulls if some calls fail
+            */
+            setVestingSchedules([]); // Set to empty for now
         } catch (error) {
-            console.error("Error loading vesting schedules:", error);
-            toast.error("Failed to load vesting schedules");
+            console.error("Error fetching vesting schedules:", error);
+            setVestingClaimError("Failed to load vesting schedules.");
+            setVestingSchedules([]);
         } finally {
             setIsLoadingVestingSchedules(false);
         }
     };
-    
-    // Function to handle vesting claim
-    const handleVestingClaim = async (presaleAddress: string) => {
-        if (!address) return;
-        
-        setVestingClaimError(null);
-        setVestingClaimPresaleAddress(presaleAddress);
-        setIsVestingClaimPending(true);
-        
-        try {
-            // Prepare the contract write
-            const hash = await writeContractAsync({
-                address: actualVestingAddress,
-                abi: vestingAbi,
-                functionName: "release",
-                args: [presaleAddress]
-            });
-            
-            setVestingClaimHash(hash);
-            setIsVestingClaimPending(false);
-            setIsVestingClaimConfirming(true);
-            
-            // Wait for transaction confirmation
-            const receipt = await fetch(`/api/waitForTransaction`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hash })
-            }).then(res => res.json());
-            
-            if (receipt.status === "success") {
-                toast.success("Vesting claim successful!");
-                // Refresh vesting schedules
-                loadVestingSchedules();
-            } else {
-                throw new Error("Transaction failed");
+
+    // --- Fetching Liquidity Locks --- 
+    const { data: userLockDetails, isLoading: isLoadingLiquidityLocks, refetch: refetchLiquidityLocks, error: errorLiquidityLocks } = useReadContract({
+        abi: liquidityLockerAbi,
+        address: liquidityLockerAddress,
+        functionName: "getUserLockDetails",
+        args: [address as Address],
+        query: {
+            enabled: isConnected && !!address,
+            select: (data) => {
+                // The ABI says it returns tuple[], let's ensure it's an array
+                if (!Array.isArray(data)) return [];
+                // Add a unique ID to each lock for React keys
+                return data.map((lock, index) => ({ ...lock, id: `${address}-${index}` }));
             }
-        } catch (error) {
-            setVestingClaimError(ensureString(error));
-            toast.error("Failed to claim vested tokens");
-        } finally {
-            setIsVestingClaimPending(false);
-            setIsVestingClaimConfirming(false);
         }
-    };
-    
-    // Load vesting schedules on component mount
+    });
+
+    useEffect(() => {
+        if (userLockDetails) {
+            setLiquidityLocks(userLockDetails);
+        }
+    }, [userLockDetails]);
+
+    // Refetch locks when the component mounts or address changes
     useEffect(() => {
         if (isConnected && address) {
-            loadVestingSchedules();
+            refetchLiquidityLocks();
+        }
+    }, [isConnected, address, refetchLiquidityLocks]);
+
+    // Refetch vesting and liquidity data when contributed presales list changes
+    useEffect(() => {
+        if (contributedPresalesAddresses) {
+            fetchVestingSchedules();
+        }
+    }, [contributedPresalesAddresses]);
+
+    useEffect(() => {
+        if (address) {
+            fetchLiquidityLocks();
+        }
+    }, [address]);
+
+    // Handle vesting claim transaction status
+    useEffect(() => {
+        if (isVestingClaimConfirmed) {
+            toast.success("Vesting Claim Successful!", { description: `Tx: ${shortenAddress(vestingClaimHash)}` });
+            setVestingClaimError(null);
+            setVestingClaimPresaleAddress(null);
+            fetchVestingSchedules(); // Refetch schedules after successful claim
+            resetVestingClaimContract();
+        }
+    }, [isVestingClaimConfirmed, vestingClaimHash, resetVestingClaimContract]);
+
+    // Handle liquidity withdraw transaction status
+    useEffect(() => {
+        if (isLiquidityWithdrawConfirmed) {
+            toast.success("Liquidity Withdraw Successful!", { description: `Tx: ${shortenAddress(liquidityWithdrawHash)}` });
+            setLiquidityWithdrawError(null);
+            setLiquidityWithdrawLockId(null);
+            fetchLiquidityLocks(); // Refetch locks after successful withdrawal
+            resetLiquidityWithdrawContract();
+        }
+    }, [isLiquidityWithdrawConfirmed, liquidityWithdrawHash, resetLiquidityWithdrawContract]);
+
+    const handleVestingClaim = async (presaleAddr: Address) => {
+        if (!address) return;
+        setVestingClaimError(null);
+        setVestingClaimPresaleAddress(presaleAddr);
+        try {
+            await writeContractAsync({
+                abi: vestingAbi,
+                address: vestingAddress, // Make sure this is the correct vesting contract address
+                functionName: "release",
+                args: [presaleAddr],
+            });
+            toast.info("Sending Vesting Claim Transaction...");
+        } catch (err: any) {
+            const msg = ensureString(err, "Vesting claim failed.");
+            setVestingClaimError(msg);
+            toast.error("Vesting Claim Failed", { description: msg });
+            setVestingClaimPresaleAddress(null); // Clear target on error
+        }
+    };
+
+    const handleLiquidityWithdraw = async (lockId: number) => {
+        if (!address) return;
+        setLiquidityWithdrawError(null);
+        setLiquidityWithdrawLockId(lockId);
+        try {
+            await writeContractAsync({
+                abi: liquidityLockerAbi,
+                address: liquidityLockerAddress, // Make sure this is the correct locker address
+                functionName: "withdraw",
+                args: [BigInt(lockId)],
+            });
+            toast.info("Sending Liquidity Withdraw Transaction...");
+        } catch (err: any) {
+            const msg = ensureString(err, "Liquidity withdraw failed.");
+            setLiquidityWithdrawError(msg);
+            toast.error("Liquidity Withdraw Failed", { description: msg });
+            setLiquidityWithdrawLockId(null); // Clear target on error
+        }
+    };
+
+    const refetchAllData = () => {
+        refetchAllPresalesFromFactory();
+        refetchCreatedPresales();
+        refetchContributedPresalesAddresses();
+        fetchVestingSchedules(); // Refetch vesting
+        fetchLiquidityLocks(); // Refetch liquidity locks
+    };
+
+    useEffect(() => {
+        if (isConnected && address) {
+            refetchAllData(); // Initial fetch on connect
         }
     }, [isConnected, address]);
 
@@ -914,7 +844,8 @@ const UserProfilePage = () => {
         );
     }
 
-    const isLoading = isLoadingAllPresales || isLoadingCreated || isLoadingContributedAddresses;
+    // Updated isLoading check
+    const isLoading = isLoadingAllPresales || isLoadingCreated || isLoadingContributedAddresses || isLoadingVestingSchedules || isLoadingLiquidityLocks;
 
     const mainAddress = address || undefined;
 
@@ -929,18 +860,19 @@ const UserProfilePage = () => {
                 </Link>
             </div>
 
-            {/* Add the Farcaster Profile Section right here */}
-<div className="mb-6">
-   <FarcasterProfileSDKDisplay address={mainAddress} size="lg" showBadge={true} />
-
-</div>
+            {/* Farcaster Profile Section */}
+            <div className="mb-6">
+                <FarcasterProfileSDKDisplay address={mainAddress} size="lg" showBadge={true} />
+            </div>
 
             <Tabs defaultValue="created">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-2 mb-4">
+                    {/* Updated TabsList */} 
                     <TabsList className="grid w-full grid-cols-1 gap-1 sm:flex sm:w-auto sm:flex-wrap sm:gap-0">
                         <TabsTrigger value="created" className="w-full sm:w-auto">My Created ({createdPresalesData?.length || 0})</TabsTrigger>
                         <TabsTrigger value="contributed" className="w-full sm:w-auto">Contributed To ({contributedPresalesAddresses?.length || 0})</TabsTrigger>
-                        <TabsTrigger value="vesting" className="w-full sm:w-auto">My Vesting</TabsTrigger>
+                        <TabsTrigger value="vesting" className="w-full sm:w-auto">My Vesting ({vestingSchedules?.length || 0})</TabsTrigger>
+                        <TabsTrigger value="liquidity" className="w-full sm:w-auto">Liquidity Locks ({liquidityLocks?.length || 0})</TabsTrigger>
                         <TabsTrigger value="history" className="w-full sm:w-auto">History</TabsTrigger>
                     </TabsList>
                     <Button variant="outline" size="sm" onClick={refetchAllData} disabled={isLoading} className="w-full mt-2 sm:mt-0 sm:w-auto flex-shrink-0">
@@ -948,6 +880,8 @@ const UserProfilePage = () => {
                         Refresh Data
                     </Button>
                 </div>
+                
+                {/* --- Created Presales Tab --- */}
                 <TabsContent value="created">
                     {isLoadingCreated && <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">{[...Array(2)].map((_,i) => <Card key={i} className="animate-pulse"><CardHeader><Skeleton className="h-5 w-3/4" /><Skeleton className="h-3 w-full mt-1" /></CardHeader><CardContent><div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground mb-3 pt-2 border-t border-border"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /></div><Skeleton className="h-8 w-full" /></CardContent></Card>)}</div>}
                     {errorAllPresales && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading all presales list: {ensureString(errorAllPresales.message)}</AlertDescription></Alert>}
@@ -964,6 +898,8 @@ const UserProfilePage = () => {
                         )
                     )}
                 </TabsContent>
+                
+                {/* --- Contributed Presales Tab --- */}
                 <TabsContent value="contributed">
                     {isLoadingContributedAddresses && <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">{[...Array(2)].map((_,i) => <Card key={i} className="animate-pulse"><CardHeader><Skeleton className="h-4 w-2/3" /><Skeleton className="h-3 w-1/2 mt-1" /></CardHeader><CardContent className="space-y-2"><Skeleton className="h-4 w-full" /><div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border"><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /><Skeleton className="h-4 w-1/3" /><Skeleton className="h-4 w-1/2" /></div><div className="flex gap-2 mt-2"><Skeleton className="h-8 w-16" /><Skeleton className="h-8 w-16" /></div></CardContent></Card>)}</div>}
                     {errorAllPresales && <Alert variant="destructive"><AlertCircle className="h-4 w-4" /><AlertDescription>Error loading all presales list: {ensureString(errorAllPresales.message)}</AlertDescription></Alert>}
@@ -972,7 +908,7 @@ const UserProfilePage = () => {
                         contributedPresalesAddresses && contributedPresalesAddresses.length > 0 ? (
                             <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2">
                                 {contributedPresalesAddresses.map((presaleAddr) => (
-                                    <ContributedPresaleCard key={presaleAddr} presaleAddress={presaleAddr} userAddress={address} refetchContributedPresalesList={refetchContributedPresalesAddresses} />
+                                    <ContributedPresaleCard key={presaleAddr} presaleAddress={presaleAddr} userAddress={address as Address} refetchContributedPresalesList={refetchContributedPresalesAddresses} />
                                 ))}
                             </div>
                         ) : (
@@ -980,6 +916,8 @@ const UserProfilePage = () => {
                         )
                     )}
                 </TabsContent>
+                
+                {/* --- Vesting Tab --- */}
                 <TabsContent value="vesting">
                     <Card>
                         <CardHeader>
@@ -1013,8 +951,11 @@ const UserProfilePage = () => {
                             
                             {!isLoadingVestingSchedules && vestingSchedules && vestingSchedules.length > 0 ? (
                                 <div className="grid gap-4 md:grid-cols-1">
+                                    {/* Replace with actual mapping over vestingSchedules data */}
                                     {vestingSchedules.map((schedule, index) => (
                                         <Card key={index} className="overflow-hidden">
+                                            {/* ... Existing Vesting Card Structure ... */}
+                                            {/* Make sure to use actual data from schedule object */}
                                             <CardHeader className="pb-2">
                                                 <div className="flex justify-between items-start">
                                                     <div>
@@ -1031,34 +972,21 @@ const UserProfilePage = () => {
                                                 </div>
                                             </CardHeader>
                                             <CardContent className="space-y-3">
+                                                {/* Progress Bar */}
                                                 <div className="w-full bg-secondary rounded-full h-2.5 mt-2">
                                                     <div 
                                                         className="bg-primary h-2.5 rounded-full" 
-                                                        style={{ 
-                                                            width: `${Math.min(100, Number(schedule.progressPercentage))}%` 
-                                                        }}
+                                                        style={{ width: `${Math.min(100, Number(schedule.progressPercentage || 0))}%` }}
                                                     ></div>
                                                 </div>
-                                                
+                                                {/* Details Grid */}
                                                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border">
-                                                    <div>
-                                                        <p className="font-medium text-foreground">Total Vested:</p>
-                                                        <p>{formatTokenAmount(schedule.totalAmount, schedule.tokenDecimals, schedule.tokenSymbol)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-foreground">Released:</p>
-                                                        <p>{formatTokenAmount(schedule.releasedAmount, schedule.tokenDecimals, schedule.tokenSymbol)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-foreground">Claimable Now:</p>
-                                                        <p>{formatTokenAmount(schedule.claimableAmount, schedule.tokenDecimals, schedule.tokenSymbol)}</p>
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium text-foreground">Vesting End:</p>
-                                                        <p>{formatTimestamp(schedule.endTime)}</p>
-                                                    </div>
+                                                    <div><p className="font-medium text-foreground">Total Vested:</p><p>{formatTokenAmount(schedule.totalAmount, schedule.tokenDecimals, schedule.tokenSymbol)}</p></div>
+                                                    <div><p className="font-medium text-foreground">Released:</p><p>{formatTokenAmount(schedule.releasedAmount, schedule.tokenDecimals, schedule.tokenSymbol)}</p></div>
+                                                    <div><p className="font-medium text-foreground">Claimable Now:</p><p>{formatTokenAmount(schedule.claimableAmount, schedule.tokenDecimals, schedule.tokenSymbol)}</p></div>
+                                                    <div><p className="font-medium text-foreground">Vesting End:</p><p>{formatTimestamp(schedule.endTime)}</p></div>
                                                 </div>
-
+                                                {/* Claim Button & Status */}
                                                 <div className="flex flex-wrap gap-2 mt-2">
                                                     <Button 
                                                         size="sm" 
@@ -1068,22 +996,11 @@ const UserProfilePage = () => {
                                                         Claim
                                                     </Button>
                                                 </div>
-                                                
                                                 {vestingClaimError && vestingClaimPresaleAddress === schedule.presaleAddress && (
-                                                    <Alert variant="destructive" className="mt-2">
-                                                        <AlertCircle className="h-4 w-4" />
-                                                        <AlertDescription>{ensureString(vestingClaimError)}</AlertDescription>
-                                                    </Alert>
+                                                    <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(vestingClaimError)}</AlertDescription></Alert>
                                                 )}
-                                                
                                                 {(isVestingClaimPending || isVestingClaimConfirming) && vestingClaimPresaleAddress === schedule.presaleAddress && (
-                                                    <Alert variant="default" className="mt-2">
-                                                        <Info className="h-4 w-4" />
-                                                        <AlertDescription>
-                                                            {isVestingClaimConfirming ? "Confirming claim..." : "Processing claim..."} 
-                                                            Tx: {shortenAddress(vestingClaimHash || undefined)}
-                                                        </AlertDescription>
-                                                    </Alert>
+                                                    <Alert variant="default" className="mt-2"><Info className="h-4 w-4" /><AlertDescription>{isVestingClaimConfirming ? "Confirming claim..." : "Processing claim..."} Tx: {shortenAddress(vestingClaimHash || undefined)}</AlertDescription></Alert>
                                                 )}
                                             </CardContent>
                                         </Card>
@@ -1091,12 +1008,108 @@ const UserProfilePage = () => {
                                 </div>
                             ) : (
                                 !isLoadingVestingSchedules && (
-                                    <p className="text-muted-foreground text-center py-4">You don't have any active vesting schedules.</p>
+                                    <div className="text-center py-8">
+                                        <Clock className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-3" />
+                                        <p className="text-muted-foreground">You don't have any active vesting schedules.</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Vesting schedules will appear here when you participate in presales with vesting.</p>
+                                    </div>
                                 )
                             )}
                         </CardContent>
                     </Card>
                 </TabsContent>
+                
+                {/* --- Liquidity Locks Tab --- */}
+                <TabsContent value="liquidity">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-base font-medium">My Liquidity Locks</CardTitle>
+                            <CardDescription className="text-xs">Locked liquidity tokens that you own.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            {isLoadingLiquidityLocks && (
+                                <div className="grid gap-4 md:grid-cols-1">
+                                    {[...Array(2)].map((_, i) => (
+                                        <Card key={i} className="animate-pulse">
+                                            <CardHeader>
+                                                <Skeleton className="h-4 w-2/3" />
+                                                <Skeleton className="h-3 w-1/2 mt-1" />
+                                            </CardHeader>
+                                            <CardContent className="space-y-2">
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border">
+                                                    <Skeleton className="h-4 w-1/3" />
+                                                    <Skeleton className="h-4 w-1/2" />
+                                                    <Skeleton className="h-4 w-1/3" />
+                                                    <Skeleton className="h-4 w-1/2" />
+                                                </div>
+                                                <div className="flex gap-2 mt-2">
+                                                    <Skeleton className="h-8 w-16" />
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            )}
+                            
+                            {!isLoadingLiquidityLocks && liquidityLocks && liquidityLocks.length > 0 ? (
+                                <div className="grid gap-4 md:grid-cols-1">
+                                    {/* Replace with actual mapping over liquidityLocks data */}
+                                    {liquidityLocks.map((lock, index) => (
+                                        <Card key={index} className="overflow-hidden">
+                                            {/* Example Liquidity Lock Card Structure - Needs actual data */}
+                                            <CardHeader className="pb-2">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <CardTitle className="text-sm font-medium">
+                                                            {lock.tokenSymbol || "Token"} Lock #{lock.id}
+                                                        </CardTitle>
+                                                        <CardDescription className="text-xs font-mono break-all pt-1">
+                                                            Token: {shortenAddress(lock.tokenAddress)}
+                                                        </CardDescription>
+                                                    </div>
+                                                    <Badge variant={lock.isUnlockable ? "default" : "outline"} className="text-xs">
+                                                        {lock.isUnlockable ? "Unlockable" : "Locked"}
+                                                    </Badge>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent className="space-y-3">
+                                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs mt-3 pt-3 border-t border-border">
+                                                    <div><p className="font-medium text-foreground">Amount Locked:</p><p>{formatTokenAmount(lock.amount, lock.tokenDecimals, lock.tokenSymbol)}</p></div>
+                                                    <div><p className="font-medium text-foreground">Unlock Time:</p><p>{formatTimestamp(lock.unlockTime)}</p></div>
+                                                </div>
+                                                <div className="flex flex-wrap gap-2 mt-2">
+                                                    <Button 
+                                                        size="sm" 
+                                                        onClick={() => handleLiquidityWithdraw(lock.id)} 
+                                                        disabled={!lock.isUnlockable || isLiquidityWithdrawPending || isLiquidityWithdrawConfirming}
+                                                    >
+                                                        Withdraw
+                                                    </Button>
+                                                </div>
+                                                {liquidityWithdrawError && liquidityWithdrawLockId === lock.id && (
+                                                    <Alert variant="destructive" className="mt-2"><AlertCircle className="h-4 w-4" /><AlertDescription>{ensureString(liquidityWithdrawError)}</AlertDescription></Alert>
+                                                )}
+                                                {(isLiquidityWithdrawPending || isLiquidityWithdrawConfirming) && liquidityWithdrawLockId === lock.id && (
+                                                    <Alert variant="default" className="mt-2"><Info className="h-4 w-4" /><AlertDescription>{isLiquidityWithdrawConfirming ? "Confirming withdraw..." : "Processing withdraw..."} Tx: {shortenAddress(liquidityWithdrawHash || undefined)}</AlertDescription></Alert>
+                                                )}
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            ) : (
+                                !isLoadingLiquidityLocks && (
+                                    <div className="text-center py-8">
+                                        <Lock className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-3" />
+                                        <p className="text-muted-foreground">You don't have any active liquidity locks.</p>
+                                        <p className="text-xs text-muted-foreground mt-1">Your owned liquidity locks will appear here.</p>
+                                    </div>
+                                )
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+                
+                {/* --- History Tab --- */}
                 <TabsContent value="history">
                     <Card>
                         <CardHeader>
@@ -1150,3 +1163,6 @@ const UserProfilePage = () => {
 };
 
 export default UserProfilePage;
+
+
+
