@@ -408,7 +408,7 @@ const PresaleDetailPage = () => {
   const userClaimableTokensFormatted =
     userClaimableTokens !== undefined
       ? formatUnits(userClaimableTokens as bigint, 18) // Assuming presale token is 18 decimals
-      : "0";
+      : " ";
   const currencyDisplaySymbol = currencyIsEth
     ? "ETH"
     : currencySymbol ?? "Tokens";
