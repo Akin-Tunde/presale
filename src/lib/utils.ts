@@ -1,10 +1,10 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { type ClassValue, clsx } from "clsx";
+import { twMerge } from "tailwind-merge";
 import { type BadgeProps } from "@/components/ui/badge";
 import { formatUnits } from "viem";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export interface PresaleStatusReturn {
@@ -12,8 +12,12 @@ export interface PresaleStatusReturn {
   variant: BadgeProps["variant"];
 }
 
-export const getPresaleStatus = (state: number | undefined, options: any): PresaleStatusReturn => {
-  if (state === undefined || !options) return { text: "Loading...", variant: "secondary" };
+export const getPresaleStatus = (
+  state: number | undefined,
+  options: any
+): PresaleStatusReturn => {
+  if (state === undefined || !options)
+    return { text: "Loading...", variant: "secondary" };
 
   const now = BigInt(Math.floor(Date.now() / 1000));
   const startTime = options?.[9] as bigint | undefined;
@@ -23,8 +27,10 @@ export const getPresaleStatus = (state: number | undefined, options: any): Presa
     case 0: // Pending
       return { text: "Pending", variant: "secondary" };
     case 1: // Active
-      if (startTime && now < startTime) return { text: "Upcoming", variant: "default" };
-      if (endTime && now > endTime) return { text: "Ended (Processing)", variant: "outline" }; 
+      if (startTime && now < startTime)
+        return { text: "Upcoming", variant: "default" };
+      if (endTime && now > endTime)
+        return { text: "Ended (Processing)", variant: "outline" };
       return { text: "Active", variant: "default" };
     case 2: // Canceled (Failed) - As per Presale.sol enum
       return { text: "Canceled (Failed)", variant: "destructive" };
@@ -36,36 +42,59 @@ export const getPresaleStatus = (state: number | undefined, options: any): Presa
   }
 };
 
+export const ensureString = (value: any, fallback: string = "N/A"): string => {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "bigint")
+    return String(value);
+  if (value && typeof value.message === "string") return value.message;
+  if (
+    value &&
+    typeof value.toString === "function" &&
+    value.toString() !== "[object Object]"
+  )
+    return value.toString();
+  return fallback;
+};
+
 export const getInitials = (name: string | undefined | null): string => {
-    if (!name) return "?";
-    const words = name.split(/\s+/);
-    if (words.length > 1) {
-        return (words[0][0] + words[1][0]).toUpperCase();
-    }
-    if (name.length >= 2) {
-        return name.substring(0, 2).toUpperCase();
-    }
-    if (name.length === 1) {
-        return name.toUpperCase();
-    }
-    return "?";
+  if (!name) return "?";
+  const words = name.split(/\s+/);
+  if (words.length > 1) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  if (name.length >= 2) {
+    return name.substring(0, 2).toUpperCase();
+  }
+  if (name.length === 1) {
+    return name.toUpperCase();
+  }
+  return "?";
 };
 
-export const formatTokenAmount = (amount: bigint | undefined, decimals: number | undefined, symbol: string | undefined): string => {
-    if (amount === undefined) return "N/A";
-    if (decimals === undefined) return `${amount.toString()} raw units`;
-    
-    try {
-        const formatted = formatUnits(amount, decimals);
-        // Remove trailing zeros after decimal point
-        const cleanFormatted = formatted.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
-        return symbol ? `${cleanFormatted} ${symbol}` : cleanFormatted;
-    } catch (e) {
-        return `${amount.toString()} raw units`;
-    }
+export const formatTokenAmount = (
+  amount: bigint | undefined,
+  decimals: number | undefined,
+  symbol: string | undefined
+): string => {
+  if (amount === undefined) return "N/A";
+  if (decimals === undefined) return `${amount.toString()} raw units`;
+
+  try {
+    const formatted = formatUnits(amount, decimals);
+    // Remove trailing zeros after decimal point
+    const cleanFormatted = formatted
+      .replace(/(\.\d*?)0+$/, "$1")
+      .replace(/\.$/, "");
+    return symbol ? `${cleanFormatted} ${symbol}` : cleanFormatted;
+  } catch (e) {
+    return `${amount.toString()} raw units`;
+  }
 };
 
-export const formatCurrencyDisplay = (amount: bigint | undefined, decimals: number | undefined, symbol: string | undefined): string => {
-    return formatTokenAmount(amount, decimals, symbol);
+export const formatCurrencyDisplay = (
+  amount: bigint | undefined,
+  decimals: number | undefined,
+  symbol: string | undefined
+): string => {
+  return formatTokenAmount(amount, decimals, symbol);
 };
-
