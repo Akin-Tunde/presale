@@ -449,9 +449,14 @@ const PresaleDetailPage = () => {
   const hasAlreadyClaimedOrRefunded = userClaimedAmount !== undefined && (userClaimedAmount as bigint) > 0n;
 
   const canClaim =
+
+    isConnected &&
+    state === 3 && // Finalized (Success)
+
     hasContributed &&
     !hasAlreadyClaimedOrRefunded && // Check if already claimed
     state === 2 && // Finalized
+
     softCapMet &&
     claimDeadline !== undefined &&
     nowSeconds < (claimDeadline as bigint) &&
@@ -460,6 +465,16 @@ const PresaleDetailPage = () => {
     !paused;
 
   const canRefund =
+
+    isConnected &&
+    (state === 2 || // Canceled (Failed)
+      (state === 1 &&
+        endTime !== undefined &&
+        nowSeconds > endTime &&
+        !softCapMet)) &&
+    userContribution !== undefined &&
+    (userContribution as bigint) > 0n;
+
     hasContributed &&
     !hasAlreadyClaimedOrRefunded && // Check if already refunded (uses same variable)
     (state === 3 || // Canceled
@@ -468,6 +483,7 @@ const PresaleDetailPage = () => {
         nowSeconds > endTime &&
         !softCapMet)) && // Soft cap not met
     !paused;
+
 
   // --- Gas Estimation ---
   const { data: approveGas } = useEstimateGas({
@@ -912,10 +928,17 @@ const PresaleDetailPage = () => {
                     <EstimatedFeeDisplay fee={contributeFee} />
                   </Button>
                 </div>
+
+                {actionError && (
+                  <Alert
+                    variant="destructive"
+                    className="bg-errorBg border-red-200"
+
                 {actionError && currentAction === 'contribute' && (
                   <Alert
                     variant="destructive"
                     className="mt-4 bg-errorBg border-red-200"
+
                   >
                     <AlertCircle className="h-4 w-4 text-red-600" />
                     <AlertTitle className="text-red-800">Error</AlertTitle>
@@ -935,6 +958,46 @@ const PresaleDetailPage = () => {
                 Actions
               </h3>
               <div className="flex flex-col sm:flex-row gap-2">
+
+                {canClaim && (
+                  <Button
+                    onClick={() => handleClaimOrRefund("claim")}
+                    disabled={isActionInProgress}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    {currentAction === "claim" && isActionInProgress ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Claiming...
+                      </>
+                    ) : (
+                      `Claim ${userClaimableTokensFormatted} ${
+                        tokenSymbol || "Tokens"
+                      }`
+                    )}
+                    <EstimatedFeeDisplay fee={claimFee} />
+                  </Button>
+                )}
+                {canRefund && (
+                  <Button
+                    onClick={() => handleClaimOrRefund("refund")}
+                    disabled={isActionInProgress}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    {currentAction === "refund" && isActionInProgress ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Refunding...
+                      </>
+                    ) : (
+                      `Refund ${userContributionFormatted} ${currencyDisplaySymbol}`
+                    )}
+                    <EstimatedFeeDisplay fee={refundFee} />
+                  </Button>
+                )}
+              </div>
+              {actionError && currentAction && (canClaim || canRefund) && (
+
                 {/* Claim Button - Always show if contributed, disable based on canClaim */}
                 <Button
                   onClick={() => handleClaimOrRefund("claim")}
@@ -979,6 +1042,7 @@ const PresaleDetailPage = () => {
               </div>
               {/* Keep the error alert logic, ensure it shows for relevant actions */}
               {actionError && currentAction && (currentAction === 'claim' || currentAction === 'refund') && (
+
                 <Alert
                   variant="destructive"
                   className="mt-4 bg-errorBg border-red-200"
@@ -993,14 +1057,22 @@ const PresaleDetailPage = () => {
             </div>
           )}
 
+
+          {/* User Info Section */}
+          {isConnected &&
+            userContribution !== undefined &&
+            (userContribution as bigint) > 0n && (
+
           {/* User Info Section - Show if user has contributed */}
           {hasContributed && (
+
               <div className="pt-6 border-t border-primary-100/20">
                 <h3 className="text-lg font-heading font-semibold mb-2 text-foreground">
                   Your Contribution
                 </h3>
                 <p className="text-sm text-muted-foreground">
                   You contributed:{" "}
+
                   <span className="font-semibold text-foreground">
                     {userContributionFormatted} {currencyDisplaySymbol}
                   </span>
@@ -1008,15 +1080,26 @@ const PresaleDetailPage = () => {
                 {/* Optionally show claimable amount here too, even if button is disabled */}
                 <p className="text-sm text-muted-foreground mt-1">
                   Claimable:{" "}
+
                   <span className="font-semibold text-foreground">
-                    {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
+                    {userContributionFormatted} {currencyDisplaySymbol}
                   </span>
                 </p>
+
+                {canClaim && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Claimable:{" "}
+                    <span className="font-semibold text-foreground">
+                      {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
+                    </span>
+                  </p>
+
                 {/* Optionally show if already claimed/refunded */}
                 {hasAlreadyClaimedOrRefunded && (
                    <p className="text-sm text-yellow-600 mt-1">
                      (Already Claimed/Refunded)
                    </p>
+
                 )}
               </div>
             )}
@@ -1208,4 +1291,3 @@ const PresaleDetailPage = () => {
 };
 
 export default PresaleDetailPage;
-

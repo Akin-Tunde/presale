@@ -32,6 +32,9 @@ module.exports = {
           900: "#134942", // New primary base
           800: "#0F3732", // Darker shade
           700: "#1A5A52", // Lighter shade
+          600: "#23786A",
+          100: "#ecf5f3", // lightest shade (matches themeColors.lightTeal)
+          50: "#f6fbfa",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary))",
