@@ -437,20 +437,21 @@ const PresaleDetailPage = () => {
 
   const canClaim =
     isConnected &&
-    state === 2 &&
+    state === 3 && // Finalized (Success)
     softCapMet &&
     claimDeadline !== undefined &&
     nowSeconds < (claimDeadline as bigint) &&
     userClaimableTokens !== undefined &&
     (userClaimableTokens as bigint) > 0n &&
     !paused;
+
   const canRefund =
     isConnected &&
-    (state === 3 || // Canceled
+    (state === 2 || // Canceled (Failed)
       (state === 1 &&
         endTime !== undefined &&
         nowSeconds > endTime &&
-        !softCapMet)) && // Active, ended, soft cap not met
+        !softCapMet)) &&
     userContribution !== undefined &&
     (userContribution as bigint) > 0n;
 
