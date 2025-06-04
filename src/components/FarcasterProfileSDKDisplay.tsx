@@ -45,8 +45,8 @@ export const FarcasterProfileSDKDisplay: React.FC<FarcasterProfileSDKDisplayProp
   }
   
   // Ensure we have display text
-  const displayText = farcasterUser?.name || `${address.slice(0, 6)}...${address.slice(-4)}`;
-  console.log("[FarcasterProfileSDKDisplay] Display text:", displayText);
+  const displayText = farcasterUser?.name || (typeof address === 'string' && address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Unknown Address');
+ 
   
   return (
     <div className="flex items-center gap-2">

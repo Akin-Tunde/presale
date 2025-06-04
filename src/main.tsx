@@ -10,6 +10,11 @@ import { ThemeProvider } from "./components/theme-provider";
 // import { Toaster } from "@/components/ui/sonner"; // Toaster is now only in App.tsx
 import { sdk as FrameSDK } from "@farcaster/frame-sdk"; // Changed import to named import 'sdk' and aliased
 
+import { setupVestingLogging } from "./utils/vestingLogger";
+
+// Initialize vesting logging
+setupVestingLogging();
+
 function FarcasterFrameProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const init = async () => {

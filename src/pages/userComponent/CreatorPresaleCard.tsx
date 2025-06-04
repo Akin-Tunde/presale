@@ -667,7 +667,6 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
             {whitelistEnabled ? "Disable Whitelist" : "Enable Whitelist"}{" "}
             <EstimatedFeeDisplay fee={calculateFee(toggleWhitelistGas)} />
           </Button>
-
           <Dialog
             open={dialogOpen === "extendClaim"}
             onOpenChange={(isOpen) => !isOpen && setDialogOpen(null)}
@@ -723,6 +722,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
               </DialogFooter>
             </DialogContent>
           </Dialog>
+
         </div>
         {actionError && (
           <Alert variant="destructive" className="mt-2">

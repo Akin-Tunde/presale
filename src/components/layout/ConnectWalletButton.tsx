@@ -31,6 +31,7 @@ const ConnectWalletButton = () => {
   const allowedChainIds: number[] = [base.id, sepolia.id];
   const allowedChainNames = [base.name, sepolia.name].join(" or ");
 
+
   useEffect(() => {
     console.log("Detected Connectors:", connectors);
     connectors.forEach((connector) => {
@@ -39,6 +40,7 @@ const ConnectWalletButton = () => {
       );
     });
   }, [connectors]);
+
 
   useEffect(() => {
     if (!isPending) {

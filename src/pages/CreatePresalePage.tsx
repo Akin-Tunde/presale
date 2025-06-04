@@ -1234,14 +1234,7 @@ const CreatePresalePage: React.FC = () => {
                   Currency: ETH
                 </p>
               </div>
-              <FormInput
-                label="Presale Image (Optional)"
-                name="presaleImage"
-                type="file"
-                value={formData.presaleImage}
-                onChange={handleInputChange}
-                info="Select an image file"
-              />
+       
 
               <SectionTitle title="Sale Settings" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
