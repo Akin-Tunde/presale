@@ -668,61 +668,6 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
             <EstimatedFeeDisplay fee={calculateFee(toggleWhitelistGas)} />
           </Button>
 
-          <Dialog
-            open={dialogOpen === "extendClaim"}
-            onOpenChange={(isOpen) => !isOpen && setDialogOpen(null)}
-          >
-            <DialogTrigger asChild>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setDialogOpen("extendClaim")}
-                disabled={!canExtendClaim || isWritePending || isConfirming}
-              >
-                Extend Claim
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Extend Claim Deadline</DialogTitle>
-              </DialogHeader>
-              <Label htmlFor="extendTime">
-                New Claim End Time (Unix Timestamp)
-              </Label>
-              <Input
-                id="extendTime"
-                type="number"
-                placeholder="e.g., 1735689600"
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-              />
-              <EstimatedFeeDisplay fee={calculateFee(extendClaimGas)} />
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button variant="ghost">Cancel</Button>
-                </DialogClose>
-                <Button
-                  onClick={() =>
-                    handleCreatorAction(
-                      "extendClaimDeadline",
-                      [BigInt(inputValue || "0")],
-                      "Extend Claim"
-                    )
-                  }
-                  disabled={
-                    isWritePending ||
-                    isConfirming ||
-                    !inputValue ||
-                    BigInt(inputValue || "0") <= (options?.[11] || 0n) ||
-                    BigInt(inputValue || "0") <= nowSeconds
-                  }
-                >
-                  Confirm{" "}
-                  <EstimatedFeeDisplay fee={calculateFee(extendClaimGas)} />
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
         </div>
         {actionError && (
           <Alert variant="destructive" className="mt-2">

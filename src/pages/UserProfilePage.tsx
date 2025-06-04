@@ -35,10 +35,12 @@ import ContributedPresaleCard from "@/pages/userComponent/ContributedPresaleCard
 import VestingSchedules from "@/pages/userComponent/VestingSchedules";
 import LiquidityLocker from "@/pages/userComponent/LiquidityLocker";
 import { toast } from "sonner";
+import PresaleJson from "@/abis/Presale.json"; 
 
 const factoryAbi = PresaleFactoryJson.abi as Abi;
 const factoryAddress = import.meta.env.VITE_PRESALE_FACTORY_ADDRESS as Address;
 const BASE_MAINNET_CHAIN_ID = 8453;
+const presaleAbi = PresaleJson.abi as Abi; 
 
 const UserProfilePage = () => {
   const { address, isConnected } = useAccount();
@@ -104,12 +106,12 @@ const UserProfilePage = () => {
   } = useReadContracts({
     contracts:
       allPresalesFromFactory?.map((presaleAddress) => ({
-        abi: factoryAbi,
+        abi: presaleAbi,
         address: presaleAddress,
         functionName: "contributions",
         args: [address as Address],
       })) ?? [],
-    query: {
+       query: {
       enabled:
         isConnected &&
         !!address &&
