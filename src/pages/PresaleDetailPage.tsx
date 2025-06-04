@@ -31,7 +31,6 @@ import { getPresaleStatus, getInitials } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   AlertCircle,
-  
   RefreshCw,
   Fuel,
   Lock,
@@ -438,7 +437,7 @@ const PresaleDetailPage = () => {
 
   const canClaim =
     isConnected &&
-    state === 2 &&
+    state === 3 && // Finalized (Success)
     softCapMet &&
     claimDeadline !== undefined &&
     nowSeconds < (claimDeadline as bigint) &&
@@ -447,10 +446,13 @@ const PresaleDetailPage = () => {
     !paused;
   const canRefund =
     isConnected &&
-    (state === 3 || (state === 2 && !softCapMet)) &&
+      (state === 2 || // Canceled (Failed)
+      (state === 1 &&
+        endTime !== undefined &&
+        nowSeconds > endTime &&
+        !softCapMet)) && // Active, ended, soft cap not met
     userContribution !== undefined &&
-    (userContribution as bigint) > 0n &&
-    !paused;
+    (userContribution as bigint) > 0n;
 
   // --- Gas Estimation ---
   const { data: approveGas } = useEstimateGas({
@@ -668,11 +670,17 @@ const PresaleDetailPage = () => {
     }
     // Use window.location.href for the current page URL
     const shareUrl = window.location.href;
-    const shareText = `Check out the ${tokenSymbol || 'token'} presale!\nJoin here:`;
+    const shareText = `Check out the ${
+      tokenSymbol || "token"
+    } presale!\nJoin here:`;
 
     try {
       await sdk.actions.composeCast({ text: shareText, embeds: [shareUrl] });
-      console.log("Farcaster composer opened for sharing:", shareText, shareUrl);
+      console.log(
+        "Farcaster composer opened for sharing:",
+        shareText,
+        shareUrl
+      );
     } catch (error) {
       console.error("Failed to compose cast for sharing presale:", error);
       toast.error("Could not open Farcaster composer to share.");
@@ -829,8 +837,14 @@ const PresaleDetailPage = () => {
                   onChange={(e) => setContributionAmount(e.target.value)}
                   disabled={isActionInProgress}
                   className="border-primary-200 focus:border-primary-500 focus:ring-primary-500"
-                  min={minContribFormatted !== "N/A" ? minContribFormatted : "0"}
-                  max={maxContribFormatted !== "N/A" ? maxContribFormatted : undefined}
+                  min={
+                    minContribFormatted !== "N/A" ? minContribFormatted : "0"
+                  }
+                  max={
+                    maxContribFormatted !== "N/A"
+                      ? maxContribFormatted
+                      : undefined
+                  }
                   step="any"
                 />
                 {whitelistEnabled &&
@@ -884,7 +898,10 @@ const PresaleDetailPage = () => {
                   </Button>
                 </div>
                 {actionError && (
-                  <Alert variant="destructive" className="bg-errorBg border-red-200">
+                  <Alert
+                    variant="destructive"
+                    className="bg-errorBg border-red-200"
+                  >
                     <AlertCircle className="h-4 w-4 text-red-600" />
                     <AlertTitle className="text-red-800">Error</AlertTitle>
                     <AlertDescription className="text-red-700">
@@ -915,7 +932,9 @@ const PresaleDetailPage = () => {
                         Claiming...
                       </>
                     ) : (
-                      `Claim ${userClaimableTokensFormatted} ${tokenSymbol || "Tokens"}`
+                      `Claim ${userClaimableTokensFormatted} ${
+                        tokenSymbol || "Tokens"
+                      }`
                     )}
                     <EstimatedFeeDisplay fee={claimFee} />
                   </Button>
@@ -939,7 +958,10 @@ const PresaleDetailPage = () => {
                 )}
               </div>
               {actionError && currentAction && (canClaim || canRefund) && (
-                <Alert variant="destructive" className="mt-4 bg-errorBg border-red-200">
+                <Alert
+                  variant="destructive"
+                  className="mt-4 bg-errorBg border-red-200"
+                >
                   <AlertCircle className="h-4 w-4 text-red-600" />
                   <AlertTitle className="text-red-800">Error</AlertTitle>
                   <AlertDescription className="text-red-700">
@@ -951,27 +973,29 @@ const PresaleDetailPage = () => {
           )}
 
           {/* User Info Section */}
-          {isConnected && userContribution !== undefined && (userContribution as bigint) > 0n && (
-            <div className="pt-6 border-t border-primary-100/20">
-              <h3 className="text-lg font-heading font-semibold mb-2 text-foreground">
-                Your Contribution
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                You contributed:{" "}
-                <span className="font-semibold text-foreground">
-                  {userContributionFormatted} {currencyDisplaySymbol}
-                </span>
-              </p>
-              {canClaim && (
-                <p className="text-sm text-muted-foreground mt-1">
-                  Claimable:{" "}
+          {isConnected &&
+            userContribution !== undefined &&
+            (userContribution as bigint) > 0n && (
+              <div className="pt-6 border-t border-primary-100/20">
+                <h3 className="text-lg font-heading font-semibold mb-2 text-foreground">
+                  Your Contribution
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  You contributed:{" "}
                   <span className="font-semibold text-foreground">
-                    {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
+                    {userContributionFormatted} {currencyDisplaySymbol}
                   </span>
                 </p>
-              )}
-            </div>
-          )}
+                {canClaim && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Claimable:{" "}
+                    <span className="font-semibold text-foreground">
+                      {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
+                    </span>
+                  </p>
+                )}
+              </div>
+            )}
 
           {/* Presale Details Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-primary-100/20">
@@ -1059,24 +1083,31 @@ const PresaleDetailPage = () => {
             {/* Liquidity & Unsold Tokens Section */}
             <div className="bg-primary-50 rounded-lg p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200">
               <div className="text-primary-900 font-medium mb-2 flex items-center">
-                <Lock className="h-4 w-4 mr-2 text-primary-700" /> Liquidity & Unsold
+                <Lock className="h-4 w-4 mr-2 text-primary-700" /> Liquidity &
+                Unsold
               </div>
               <div className="text-sm text-muted-foreground">
                 Liquidity Percent:{" "}
                 <span className="font-semibold text-foreground">
-                  {liquidityBps !== undefined ? formatLiquidityBps(liquidityBps) : "N/A"}
+                  {liquidityBps !== undefined
+                    ? formatLiquidityBps(liquidityBps)
+                    : "N/A"}
                 </span>
               </div>
               <div className="text-sm text-muted-foreground mt-1">
                 Lockup Duration:{" "}
                 <span className="font-semibold text-foreground">
-                  {lockupDurationSeconds !== undefined ? formatLockupDuration(lockupDurationSeconds) : "N/A"}
+                  {lockupDurationSeconds !== undefined
+                    ? formatLockupDuration(lockupDurationSeconds)
+                    : "N/A"}
                 </span>
               </div>
               <div className="text-sm text-muted-foreground mt-1">
                 Unsold Tokens:{" "}
                 <span className="font-semibold text-foreground">
-                  {leftoverTokenOption !== undefined ? getLeftoverTokenDestination(leftoverTokenOption) : "N/A"}
+                  {leftoverTokenOption !== undefined
+                    ? getLeftoverTokenDestination(leftoverTokenOption)
+                    : "N/A"}
                 </span>
               </div>
             </div>
@@ -1099,7 +1130,9 @@ const PresaleDetailPage = () => {
                   Vesting Period:{" "}
                   <span className="font-semibold text-foreground">
                     {(vestingOptions as any)?.vestingPeriodSeconds
-                      ? formatLockupDuration((vestingOptions as any)?.vestingPeriodSeconds)
+                      ? formatLockupDuration(
+                          (vestingOptions as any)?.vestingPeriodSeconds
+                        )
                       : "N/A"}
                   </span>
                 </p>
@@ -1107,7 +1140,9 @@ const PresaleDetailPage = () => {
                   Cliff Period:{" "}
                   <span className="font-semibold text-foreground">
                     {(vestingOptions as any)?.cliffSeconds
-                      ? formatLockupDuration((vestingOptions as any)?.cliffSeconds)
+                      ? formatLockupDuration(
+                          (vestingOptions as any)?.cliffSeconds
+                        )
                       : "0 days"}
                   </span>
                 </p>
@@ -1149,4 +1184,3 @@ const PresaleDetailPage = () => {
 };
 
 export default PresaleDetailPage;
-
