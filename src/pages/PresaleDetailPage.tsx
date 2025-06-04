@@ -428,16 +428,9 @@ const PresaleDetailPage = () => {
     ? `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/assets/${tokenAddress}/logo.png`
     : undefined;
 
-  // --- Action Eligibility ---
-  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
-  const canContribute =
-    state === 1 &&
-    !paused &&
-    startTime !== undefined &&
-    endTime !== undefined &&
-    nowSeconds >= startTime &&
-    nowSeconds <= endTime;
-  const softCapMet =
+  // --- Action Eligibility --- [MODIFIED TO MATCH ContributedPresaleCard.tsx LOGIC]
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1000)); // Keep this for potential future use, though not used in card logic
+  const softCapMet = // Keep this for potential future use, though not used in card logic
     totalContributed !== undefined &&
     softCap !== undefined &&
     (totalContributed as bigint) >= softCap;
@@ -446,28 +439,31 @@ const PresaleDetailPage = () => {
   const hasContributed = isConnected && userContribution !== undefined && (userContribution as bigint) > 0n;
 
   // Determine if user has already claimed/refunded (using userClaimedAmount)
-  const hasAlreadyClaimedOrRefunded = userClaimedAmount !== undefined && (userClaimedAmount as bigint) > 0n;
+  // Note: Card logic uses slightly different check for claim vs refund, replicated below
+  const hasAlreadyClaimedOrRefunded = userClaimedAmount !== undefined && (userClaimedAmount as bigint) > 0n; // Original combined check
 
+  // MODIFIED canClaim logic (from ContributedPresaleCard)
   const canClaim =
-    hasContributed &&
-    !hasAlreadyClaimedOrRefunded && // Check if already claimed
-    state === 2 && // Finalized
-    softCapMet &&
-    claimDeadline !== undefined &&
-    nowSeconds < (claimDeadline as bigint) &&
-    userClaimableTokens !== undefined &&
-    (userClaimableTokens as bigint) > 0n &&
-    !paused;
+    state === 3 && // Using state 3 as per card logic
+    hasContributed && // Check if user contributed
+    (userClaimedAmount !== undefined // Check if claimed amount is less than contribution
+      ? (userClaimedAmount as bigint) < (userContribution as bigint)
+      : true); // If claimed amount is undefined, assume not fully claimed
 
+  // MODIFIED canRefund logic (from ContributedPresaleCard)
   const canRefund =
-    hasContributed &&
-    !hasAlreadyClaimedOrRefunded && // Check if already refunded (uses same variable)
-    (state === 3 || // Canceled
-      (state === 1 && // Active but ended
-        endTime !== undefined &&
-        nowSeconds > endTime &&
-        !softCapMet)) && // Soft cap not met
-    !paused;
+    state === 2 && // Using state 2 as per card logic
+    hasContributed && // Check if user contributed
+    (userClaimedAmount !== undefined ? (userClaimedAmount as bigint) === 0n : true); // Check if claimed amount is zero (or undefined)
+
+  // Original canContribute logic remains unchanged for now, as it wasn't part of the request
+  const canContribute =
+    state === 1 &&
+    !paused &&
+    startTime !== undefined &&
+    endTime !== undefined &&
+    nowSeconds >= startTime &&
+    nowSeconds <= endTime;
 
   // --- Gas Estimation ---
   const { data: approveGas } = useEstimateGas({
