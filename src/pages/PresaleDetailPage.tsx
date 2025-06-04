@@ -429,11 +429,9 @@ const PresaleDetailPage = () => {
     : undefined;
 
   // --- Action Eligibility --- [MODIFIED TO MATCH ContributedPresaleCard.tsx LOGIC]
-  const nowSeconds = BigInt(Math.floor(Date.now() / 1000)); // Keep this for potential future use, though not used in card logic
-  const softCapMet = // Keep this for potential future use, though not used in card logic
-    totalContributed !== undefined &&
-    softCap !== undefined &&
-    (totalContributed as bigint) >= softCap;
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+  
+ 
 
   // Determine if user has contributed
   const hasContributed = isConnected && userContribution !== undefined && (userContribution as bigint) > 0n;

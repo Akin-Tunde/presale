@@ -15,17 +15,7 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog";
+
 import { AlertCircle, RefreshCw } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -72,9 +62,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
   const { data: feeData } = useFeeData();
 
   const [actionError, setActionError] = useState<string>("");
-  const [dialogOpen, setDialogOpen] = useState<string | null>(null);
-  const [inputValue, setInputValue] = useState<string>("");
-
+  
   const presaleContract = { address: presaleAddress, abi: presaleAbi } as const;
 
   const {
@@ -189,8 +177,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
         description: `Tx: ${ensureString(receipt.transactionHash)}`,
       });
       setActionError("");
-      setDialogOpen(null);
-      setInputValue("");
+     
       refetchCreatedPresalesList();
       refetchDetails();
       resetWriteContract();
@@ -259,8 +246,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
     ownerBalance > 0n;
   const canPauseUnpause = isOwner && presaleDataAvailable && state === 1;
   const canToggleWhitelist = isOwner && presaleDataAvailable && state === 0;
-  const canExtendClaim = isOwner && presaleDataAvailable && state === 3;
-
+ 
   const { data: finalizeGas } = useEstimateGas({
     to: presaleAddress,
     data: encodeFunctionData({
@@ -321,24 +307,7 @@ const CreatorPresaleCard: React.FC<CreatorPresaleCardProps> = ({
     account: userAddress,
     query: { enabled: !!userAddress && canToggleWhitelist },
   });
-  const { data: extendClaimGas } = useEstimateGas({
-    to: presaleAddress,
-    data: encodeFunctionData({
-      abi: presaleAbi,
-      functionName: "extendClaimDeadline",
-      args: [BigInt(inputValue || "0")],
-    }),
-    account: userAddress,
-    query: {
-      enabled:
-        !!userAddress &&
-        canExtendClaim &&
-        dialogOpen === "extendClaim" &&
-        !!inputValue &&
-        BigInt(inputValue) > 0,
-    },
-  });
-
+  
   const isLoadingAdditionalData =
     (!currencyIsEth &&
       (isLoadingCurrencySymbolCreator || isLoadingCurrencyDecimalsCreator)) ||
