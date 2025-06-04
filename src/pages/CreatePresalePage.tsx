@@ -1234,7 +1234,7 @@ const CreatePresalePage: React.FC = () => {
                   Currency: ETH
                 </p>
               </div>
-             
+       
 
               <SectionTitle title="Sale Settings" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
