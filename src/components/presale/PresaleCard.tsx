@@ -395,7 +395,7 @@ const PresaleCard: React.FC<PresaleCardProps> = ({ presaleAddress }) => {
                 alt="Warpcast"
                 className="h-4 w-4 mr-2"
               />
-              Share on Warpcast (SDK)
+              Share on Farcaster
             </DropdownMenuItem>
             {/* Twitter Share Item (Unchanged) */}
             <DropdownMenuItem asChild>
