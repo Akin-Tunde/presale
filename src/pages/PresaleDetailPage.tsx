@@ -621,6 +621,27 @@ const PresaleDetailPage = () => {
       !presaleContractConfig.address
     )
       return;
+
+    // --- Min/Max contribution check ---
+    if (minContrib && contributionAmountParsed < minContrib) {
+      const errorMsg = `Minimum contribution is ${minContribFormatted} ${currencyDisplaySymbol}`;
+      setActionError(errorMsg);
+      toast.error("Contribution Too Low", {
+        description: errorMsg,
+        icon: <AlertTriangle className="h-5 w-5 text-red-500" />,
+      });
+      return;
+    }
+    if (maxContrib && contributionAmountParsed > maxContrib) {
+      const errorMsg = `Maximum contribution is ${maxContribFormatted} ${currencyDisplaySymbol}`;
+      setActionError(errorMsg);
+      toast.error("Contribution Too High", {
+        description: errorMsg,
+        icon: <AlertTriangle className="h-5 w-5 text-red-500" />,
+      });
+      return;
+    }
+
     if (
       whitelistEnabled &&
       merkleProof.length === 0 &&
