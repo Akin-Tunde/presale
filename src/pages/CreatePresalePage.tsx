@@ -8,7 +8,6 @@ import {
 } from "wagmi";
 import { parseEther, parseUnits, isAddress, zeroAddress, zeroHash } from "viem";
 import { getPublicClient } from "@wagmi/core";
-import { supabase } from "@/lib/supabase";
 import { config } from "@/lib/wagmiConfig";
 // ABIs
 import { factoryAbi } from "@/abis/factoryAbi";
@@ -272,98 +271,10 @@ const isValidAddress = (address: string): boolean => {
   return address === "" || isAddress(address);
 };
 
-const savePresaleToSupabase = async (
-  presaleFormData: FormDataState,
-  creatorAddress: `0x${string}` | undefined,
-  transactionHash: `0x${string}`
-): Promise<{ success: boolean; message: string; imageUrl?: string }> => {
-  if (!creatorAddress) {
-    return { success: false, message: "Creator address is undefined." };
-  }
-
-  let presaleImageUrl: string | undefined = undefined;
-
-  if (presaleFormData.presaleImage) {
-    const file = presaleFormData.presaleImage;
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const fileName = `${Date.now()}_${sanitizedFileName}`;
-    const filePath = `public/${fileName}`;
-
-    try {
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from("presale-images")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error("Supabase image upload error:", uploadError);
-      } else if (uploadData) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("presale-images").getPublicUrl(filePath);
-        presaleImageUrl = publicUrl;
-      }
-    } catch (e) {
-      console.error("Exception during image upload:", e);
-    }
-  }
-
-  const dataToInsert = {
-    creator: creatorAddress,
-    token_address: presaleFormData.tokenAddress,
-    currency_address: presaleFormData.currencyAddress,
-    image_url: presaleImageUrl,
-    presale_rate: presaleFormData.presaleRate,
-    listing_rate: presaleFormData.listingRate,
-    hard_cap: presaleFormData.hardCap,
-    soft_cap: presaleFormData.softCap,
-    min_contribution: presaleFormData.minContribution,
-    max_contribution: presaleFormData.maxContribution,
-    liquidity_bps: presaleFormData.liquidityBps,
-    lockup_duration: presaleFormData.lockupDuration,
-    start_time: presaleFormData.start,
-    end_time: presaleFormData.end,
-    claim_delay_minutes: presaleFormData.claimDelayMinutes,
-    use_vesting: presaleFormData.useVesting,
-    vesting_tge_percent: presaleFormData.vestingTgePercent,
-    vesting_cycle_days: presaleFormData.vestingCycleDays,
-    leftover_token_option: presaleFormData.leftoverTokenOption,
-    slippage_bps: presaleFormData.slippageBps,
-    whitelist_type: presaleFormData.whitelistType,
-    merkle_root: presaleFormData.merkleRoot || zeroHash,
-    nft_contract_address: presaleFormData.nftContractAddress || zeroAddress,
-    transaction_hash: transactionHash,
-    created_at: new Date().toISOString(),
-  };
-
-  try {
-    const { error } = await supabase.from("presales").insert([dataToInsert]);
-    if (error) {
-      console.error("Supabase insert error:", error);
-      return {
-        success: false,
-        message: `Failed to save presale to database: ${error.message}`,
-      };
-    }
-    return {
-      success: true,
-      message: "Presale created and saved successfully!",
-      imageUrl: presaleImageUrl,
-    };
-  } catch (error: any) {
-    console.error("Exception during Supabase insert:", error);
-    return {
-      success: false,
-      message: `Exception saving presale to database: ${error.message}`,
-    };
-  }
-};
-
+// Define the type for form state
 interface FormDataState {
   tokenAddress: string;
-  currencyAddress: string;
+  currencyAddress: `0x${string}`;
   presaleImage: File | null;
   presaleRate: string;
   listingRate: string;
@@ -372,21 +283,26 @@ interface FormDataState {
   minContribution: string;
   maxContribution: string;
   liquidityBps: string;
-  lockupDuration: string;
-  start: string;
-  end: string;
-  claimDelayMinutes: string;
+  lockupDuration: string; // Stored in seconds as string
+  start: string; // ISO 8601 string
+  end: string; // ISO 8601 string
+  claimDelayMinutes: string; // Informational
   useVesting: boolean;
   vestingTgePercent: string;
   vestingCycleDays: string;
-  leftoverTokenOption: string;
+  leftoverTokenOption: string; // "0" for Refund (to owner), "1" for Burn
   slippageBps: string;
-  whitelistType: string;
+  whitelistType: string; // "0" Public, "1" Merkle Tree, "2" NFT Holders
   merkleRoot: string;
   nftContractAddress: string;
 }
 
+// --- State additions ---
+
 const CreatePresalePage: React.FC = () => {
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [, setApprovalCompleted] = useState(false);
   const { address, isConnected } = useAccount();
   const { connect, connectors } = useConnect();
   const { writeContractAsync } = useWriteContract();
@@ -578,19 +494,9 @@ const CreatePresalePage: React.FC = () => {
   useEffect(() => {
     if (receipt) {
       if (receipt.status === "success") {
-        savePresaleToSupabase(formData, address, receipt.transactionHash)
-          .then((result) => {
-            setStatus(
-              result.success
-                ? `${result.message} Tx: ${receipt.transactionHash}${
-                    result.imageUrl ? ` Image: ${result.imageUrl}` : ""
-                  }`
-                : `Presale created on-chain, but DB save failed: ${result.message}`
-            );
-          })
-          .catch((error) =>
-            setStatus(`Presale created, but DB save error: ${error.message}`)
-          );
+        setStatus("Presale created successfully!");
+        setShowSuccess(true);
+        setTimeout(() => setShowSuccess(false), 3000);
       } else {
         setStatus("Transaction failed: Reverted.");
       }
@@ -889,16 +795,21 @@ const CreatePresalePage: React.FC = () => {
     }
   };
 
+  // --- Approve logic ---
   const handleApprove = async () => {
     if (tokenDeposit === "0" || !formData.tokenAddress) {
       setStatus("Enter valid token deposit and address first.");
       return;
     }
+    setIsProcessing(true);
+    setShowSuccess(false);
 
     const publicClient = getPublicClient(config);
 
+    let approvalSuccess = false;
+
     if (!isTokenApproved) {
-      const success = await approveToken(
+      approvalSuccess = await approveToken(
         formData.tokenAddress,
         tokenDeposit,
         FACTORY_ADDRESS,
@@ -906,10 +817,12 @@ const CreatePresalePage: React.FC = () => {
         tokenSymbol,
         "Presale Token"
       );
-      if (success) return;
+    } else {
+      approvalSuccess = true;
     }
 
     if (
+      approvalSuccess &&
       creationFeeTokenAddress &&
       creationFeeTokenAddress !== zeroAddress &&
       parseFloat(creationFee) > 0 &&
@@ -921,7 +834,7 @@ const CreatePresalePage: React.FC = () => {
           abi: erc20Abi,
           functionName: "decimals",
         })) as number;
-        await approveToken(
+        approvalSuccess = await approveToken(
           creationFeeTokenAddress,
           creationFee,
           FACTORY_ADDRESS,
@@ -931,20 +844,33 @@ const CreatePresalePage: React.FC = () => {
         );
       } catch (err: any) {
         setStatus("Could not get fee token decimals for approval.");
+        approvalSuccess = false;
       }
+    }
+
+    setIsProcessing(false);
+
+    if (approvalSuccess) {
+      setApprovalCompleted(true);
+      setShowSuccess(true);
+      setStatus("Approval successful! You can now create the presale.");
+      setTimeout(() => setShowSuccess(false), 3000);
     }
   };
 
+  // --- Create Presale logic ---
   const createPresale = async () => {
     if (!isConnected) {
       setStatus("Please connect wallet.");
       return;
     }
-    setStatus("Validating parameters...");
+    setIsProcessing(true);
+    setShowSuccess(false);
 
     const timeValidationError = validateTimes();
     if (timeValidationError) {
       setStatus(timeValidationError);
+      setIsProcessing(false);
       return;
     }
 
@@ -953,19 +879,22 @@ const CreatePresalePage: React.FC = () => {
       formData.tokenAddress === zeroAddress
     ) {
       setStatus("Invalid or missing Token Address.");
+      setIsProcessing(false);
       return;
     }
     if (tokenDeposit === "0" || parseFloat(tokenDeposit) <= 0) {
       setStatus("Invalid token deposit. Check parameters.");
+      setIsProcessing(false);
       return;
     }
 
     if (!isTokenApproved || !isFeeApproved) {
       setStatus("Please approve tokens first.");
+      setIsProcessing(false);
       return;
     }
 
-    setStatus("Preparing transaction...");
+    setStatus("Sending transaction to create presale...");
 
     try {
       const presaleOptions = {
@@ -1006,7 +935,6 @@ const CreatePresalePage: React.FC = () => {
         }
       }
 
-      setStatus("Sending transaction to create presale...");
       const publicClient = getPublicClient(config);
       try {
         const gasEstimate = await publicClient.estimateContractGas({
@@ -1023,18 +951,13 @@ const CreatePresalePage: React.FC = () => {
           value: txOptions.value,
         });
         txOptions.gas = (gasEstimate * BigInt(120)) / BigInt(100);
-        setStatus(
+        // Only log gas details to console, not frontend
+        console.log(
           `Gas estimated: ${txOptions.gas.toString()}. Creating presale...`
         );
       } catch (gasError: any) {
         console.error("Gas estimation error details:", gasError);
-        setStatus(
-          `Gas estimation failed (Reason: ${
-            gasError.shortMessage ||
-            gasError.message ||
-            "Unknown. Check console."
-          }), using manual gas limit.`
-        );
+        // Do not show gas estimation errors to user, just fallback to manual gas
       }
 
       const hash = await writeContractAsync({
@@ -1051,7 +974,7 @@ const CreatePresalePage: React.FC = () => {
         value: txOptions.value,
       });
       setTxHash(hash);
-      setStatus(`Transaction sent: ${hash}. Waiting for confirmation...`);
+      setStatus(`Transaction sent. Waiting for confirmation...`);
     } catch (error: any) {
       if (error.message.includes("User denied")) {
         setStatus("Presale creation cancelled by user.");
@@ -1097,6 +1020,7 @@ const CreatePresalePage: React.FC = () => {
         );
       }
     }
+    setIsProcessing(false);
   };
 
   interface FormInputProps {
@@ -1166,7 +1090,7 @@ const CreatePresalePage: React.FC = () => {
             id={name as string}
             name={name as string}
             onChange={onChange}
-            className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm text-[#BFD4BF] text-base file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#BFD4BF]/20 file:text-[#BFD4BF] file:font-semibold file:hover:bg-[#BFD4BF]/30 file:transition-all file:duration-300 cursor-pointer focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30"
+            className="w-full p-3 bg-[#1C2526] border border-[#BFD4BF]/20 rounded-xl shadow-sm text-[#BFD4BF] text-base file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-[#BFD4BF]/20 file:text-[#BFD4BF] file:font-semibold file:hover:bg-[#BFD4BF]/30 file:transition-all file:duration-300 cursor-pointer focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30"
             {...props}
           />
           {name === "presaleImage" && typeof value === "object" && value && (
@@ -1184,7 +1108,7 @@ const CreatePresalePage: React.FC = () => {
             value={type !== "file" ? (value as string | number) : undefined}
             placeholder={placeholder}
             onChange={onChange}
-            className="w-full p-3 bg-[#1C2A4A] border border-[#BFD4BF]/20 rounded-xl shadow-sm focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 text-[#BFD4BF] text-base placeholder-[#BFD4BF]/50 transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30"
+            className="w-full p-3 bg-[#1C2526] border border-[#BFD4BF]/20 rounded-xl shadow-sm focus:ring-2 focus:ring-[#BFD4BF]/50 focus:border-[#BFD4BF]/50 text-[#BFD4BF] text-base placeholder-[#BFD4BF]/50 transition-all duration-300 hover:shadow-[#BFD4BF]/10 hover:border-[#BFD4BF]/30"
             {...props}
           />
           <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#BFD4BF]/10 to-[#BFD4BF]/5 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none" />
@@ -1234,7 +1158,6 @@ const CreatePresalePage: React.FC = () => {
                   Currency: ETH
                 </p>
               </div>
-       
 
               <SectionTitle title="Sale Settings" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1492,17 +1415,43 @@ const CreatePresalePage: React.FC = () => {
               <div className="mt-6 flex items-center gap-3">
                 <button
                   type="button"
-                  className="w-full bg-[#BFD4BF] text-[#14213E] py-3 px-6 rounded-lg font-semibold text-lg hover:bg-[#D4E8D4] focus:outline-none transition-all duration-300 shadow-md hover:shadow-[#BFD4BF]/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full bg-[#BFD4BF] text-[#14213E] py-3 px-6 rounded-lg font-semibold text-lg hover:bg-[#D4E8D4] focus:outline-none transition-all duration-300 shadow-md hover:shadow-[#BFD4BF]/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   onClick={
                     isTokenApproved && isFeeApproved
                       ? createPresale
                       : handleApprove
                   }
-                  disabled={isTxPending}
+                  disabled={isTxPending || isProcessing}
                 >
-                  {isTokenApproved && isFeeApproved
-                    ? "Create Presale"
-                    : "Approve Tokens"}
+                  {isProcessing ? (
+                    <>
+                      <svg
+                        className="animate-spin h-5 w-5 mr-2 text-[#14213E]"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8z"
+                        ></path>
+                      </svg>
+                      Processing...
+                    </>
+                  ) : isTokenApproved && isFeeApproved ? (
+                    "Create Presale"
+                  ) : (
+                    "Approve Tokens"
+                  )}
                 </button>
                 <button
                   type="button"
@@ -1529,24 +1478,12 @@ const CreatePresalePage: React.FC = () => {
               </div>
             </div>
 
-            {status && (
+            {showSuccess && (
               <div className="fixed bottom-4 right-4 p-4 rounded-lg shadow-lg max-w-sm w-full bg-white/90 text-base flex items-center justify-between">
-                <span
-                  className={`${
-                    status.includes("error") ||
-                    status.includes("failed") ||
-                    status.includes("cancelled")
-                      ? "text-red-600"
-                      : status.includes("success")
-                      ? "text-green-600"
-                      : "text-blue-600"
-                  }`}
-                >
-                  {status}
-                </span>
+                <span className="text-green-600">{status}</span>
                 <button
                   className="text-gray-500 hover:text-gray-700 text-sm font-medium"
-                  onClick={() => setStatus("")}
+                  onClick={() => setShowSuccess(false)}
                 >
                   Dismiss
                 </button>

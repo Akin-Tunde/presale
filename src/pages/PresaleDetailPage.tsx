@@ -46,6 +46,13 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { sdk } from "@farcaster/frame-sdk"; // Added Farcaster SDK import
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog"; // If using shadcn/ui or similar
 
 const presaleAbi = PresaleJson.abi as Abi;
 
@@ -249,6 +256,7 @@ const PresaleDetailPage = () => {
   const [actionError, setActionError] = useState("");
   const [logoError, setLogoError] = useState(false);
   const [currentAction, setCurrentAction] = useState<string | null>(null);
+  const [showContributeSuccess, setShowContributeSuccess] = useState(false);
 
   const presaleContractConfig = {
     address: presaleAddress,
@@ -430,15 +438,17 @@ const PresaleDetailPage = () => {
 
   // --- Action Eligibility --- [MODIFIED TO MATCH ContributedPresaleCard.tsx LOGIC]
   const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
-  
- 
 
   // Determine if user has contributed
-  const hasContributed = isConnected && userContribution !== undefined && (userContribution as bigint) > 0n;
+  const hasContributed =
+    isConnected &&
+    userContribution !== undefined &&
+    (userContribution as bigint) > 0n;
 
   // Determine if user has already claimed/refunded (using userClaimedAmount)
   // Note: Card logic uses slightly different check for claim vs refund, replicated below
-  const hasAlreadyClaimedOrRefunded = userClaimedAmount !== undefined && (userClaimedAmount as bigint) > 0n; // Original combined check
+  const hasAlreadyClaimedOrRefunded =
+    userClaimedAmount !== undefined && (userClaimedAmount as bigint) > 0n; // Original combined check
 
   // MODIFIED canClaim logic (from ContributedPresaleCard)
   const canClaim =
@@ -452,7 +462,9 @@ const PresaleDetailPage = () => {
   const canRefund =
     state === 2 && // Using state 2 as per card logic
     hasContributed && // Check if user contributed
-    (userClaimedAmount !== undefined ? (userClaimedAmount as bigint) === 0n : true); // Check if claimed amount is zero (or undefined)
+    (userClaimedAmount !== undefined
+      ? (userClaimedAmount as bigint) === 0n
+      : true); // Check if claimed amount is zero (or undefined)
 
   // Original canContribute logic remains unchanged for now, as it wasn't part of the request
   const canContribute =
@@ -553,7 +565,10 @@ const PresaleDetailPage = () => {
       setActionError("");
       refetchPresaleData();
       if (currentAction === "approve" && !currencyIsEth) refetchAllowance();
-      if (currentAction === "contribute") setContributionAmount("");
+      if (currentAction === "contribute") {
+        setContributionAmount("");
+        setShowContributeSuccess(true); // <-- Show modal on contribute
+      }
       setCurrentAction(null);
       resetWriteContract();
     }
@@ -906,7 +921,7 @@ const PresaleDetailPage = () => {
                     <EstimatedFeeDisplay fee={contributeFee} />
                   </Button>
                 </div>
-                {actionError && currentAction === 'contribute' && (
+                {actionError && currentAction === "contribute" && (
                   <Alert
                     variant="destructive"
                     className="mt-4 bg-errorBg border-red-200"
@@ -972,48 +987,50 @@ const PresaleDetailPage = () => {
                 </Button>
               </div>
               {/* Keep the error alert logic, ensure it shows for relevant actions */}
-              {actionError && currentAction && (currentAction === 'claim' || currentAction === 'refund') && (
-                <Alert
-                  variant="destructive"
-                  className="mt-4 bg-errorBg border-red-200"
-                >
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <AlertTitle className="text-red-800">Error</AlertTitle>
-                  <AlertDescription className="text-red-700">
-                    {actionError}
-                  </AlertDescription>
-                </Alert>
-              )}
+              {actionError &&
+                currentAction &&
+                (currentAction === "claim" || currentAction === "refund") && (
+                  <Alert
+                    variant="destructive"
+                    className="mt-4 bg-errorBg border-red-200"
+                  >
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertTitle className="text-red-800">Error</AlertTitle>
+                    <AlertDescription className="text-red-700">
+                      {actionError}
+                    </AlertDescription>
+                  </Alert>
+                )}
             </div>
           )}
 
           {/* User Info Section - Show if user has contributed */}
           {hasContributed && (
-              <div className="pt-6 border-t border-primary-100/20">
-                <h3 className="text-lg font-heading font-semibold mb-2 text-foreground">
-                  Your Contribution
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  You contributed:{" "}
-                  <span className="font-semibold text-foreground">
-                    {userContributionFormatted} {currencyDisplaySymbol}
-                  </span>
+            <div className="pt-6 border-t border-primary-100/20">
+              <h3 className="text-lg font-heading font-semibold mb-2 text-foreground">
+                Your Contribution
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                You contributed:{" "}
+                <span className="font-semibold text-foreground">
+                  {userContributionFormatted} {currencyDisplaySymbol}
+                </span>
+              </p>
+              {/* Optionally show claimable amount here too, even if button is disabled */}
+              <p className="text-sm text-muted-foreground mt-1">
+                Claimable:{" "}
+                <span className="font-semibold text-foreground">
+                  {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
+                </span>
+              </p>
+              {/* Optionally show if already claimed/refunded */}
+              {hasAlreadyClaimedOrRefunded && (
+                <p className="text-sm text-yellow-600 mt-1">
+                  (Already Claimed/Refunded)
                 </p>
-                {/* Optionally show claimable amount here too, even if button is disabled */}
-                <p className="text-sm text-muted-foreground mt-1">
-                  Claimable:{" "}
-                  <span className="font-semibold text-foreground">
-                    {userClaimableTokensFormatted} {tokenSymbol || "Tokens"}
-                  </span>
-                </p>
-                {/* Optionally show if already claimed/refunded */}
-                {hasAlreadyClaimedOrRefunded && (
-                   <p className="text-sm text-yellow-600 mt-1">
-                     (Already Claimed/Refunded)
-                   </p>
-                )}
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
           {/* Presale Details Grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-6 border-t border-primary-100/20">
@@ -1197,9 +1214,44 @@ const PresaleDetailPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Contribute Success Modal */}
+      <Dialog
+        open={showContributeSuccess}
+        onOpenChange={setShowContributeSuccess}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Contribution Successful!</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-foreground mb-4">
+              Thank you for contributing to the presale.
+            </p>
+            <Button
+              onClick={() => {
+                handleSharePresale();
+                setShowContributeSuccess(false);
+              }}
+              className="w-full bg-primary-600 hover:bg-primary-700 text-white"
+            >
+              <Share className="mr-2 h-4 w-4" />
+              Share this Presale
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowContributeSuccess(false)}
+              className="w-full mt-2"
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
 export default PresaleDetailPage;
-
