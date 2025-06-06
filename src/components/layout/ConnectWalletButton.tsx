@@ -16,12 +16,7 @@ import { base, sepolia } from "wagmi/chains";
 import { sdk } from "@farcaster/frame-sdk";
 
 const ConnectWalletButton = () => {
-  const {
-    address,
-    isConnected,
-    isConnecting,
-    chainId: connectedChainId,
-  } = useAccount();
+  const { address, isConnected, chainId: connectedChainId } = useAccount();
   const { connect, connectors, error: connectError, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const [open, setOpen] = useState(false);
