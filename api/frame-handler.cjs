@@ -313,7 +313,7 @@ module.exports = async (req, res) => {
     const frameMeta = {
       version: "next",
       imageUrl: frameData.imageUrl,
-      imageAspectRatio: "3:2",
+      imageAspectRatio: "1.91:1",
       postUrl: `${postUrl}?address=${presaleAddress}`,
       button: {
         title: "Join this Presale",
