@@ -1068,13 +1068,13 @@ const PresaleDetailPage = () => {
                 </span>
               </div>
               <div className="text-sm text-muted-foreground mt-1">
-                Min:{" "}
+                Min amt to join presale:{" "}
                 <span className="font-semibold text-foreground">
                   {minContribFormatted} {currencyDisplaySymbol}
                 </span>
               </div>
               <div className="text-sm text-muted-foreground mt-1">
-                Max:{" "}
+                Max amt to join presale:{" "}
                 <span className="font-semibold text-foreground">
                   {maxContribFormatted} {currencyDisplaySymbol}
                 </span>
