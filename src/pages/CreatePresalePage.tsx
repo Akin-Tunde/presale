@@ -5,11 +5,14 @@ import {
   useWriteContract,
   useReadContract,
   useWaitForTransactionReceipt,
+  useSwitchChain, // Added for chain switching
 } from "wagmi";
 import { parseEther, parseUnits, isAddress, zeroAddress, zeroHash } from "viem";
 import { getPublicClient } from "@wagmi/core";
 import { config } from "@/lib/wagmiConfig";
-// ABIs
+import { base } from "viem/chains"; // Import Base chain definition
+
+// ABIs (unchanged)
 import { factoryAbi } from "@/abis/factoryAbi";
 
 const erc20Abi = [
@@ -258,7 +261,7 @@ const FACTORY_ADDRESS = "0x75E53c46d8CDF6e050A368ae24CFF267B025535c";
 const WETH_ADDRESS = "0x4200000000000000000000000000000000000006";
 const UNISWAP_V2_ROUTER = "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24";
 
-// Helper Functions
+// Helper Functions (unchanged)
 const formatDateForInput = (date: Date | null | undefined): string => {
   if (!date) return "";
   const pad = (num: number) => num.toString().padStart(2, "0");
@@ -271,7 +274,7 @@ const isValidAddress = (address: string): boolean => {
   return address === "" || isAddress(address);
 };
 
-// Define the type for form state
+// FormDataState interface (unchanged)
 interface FormDataState {
   tokenAddress: string;
   currencyAddress: `0x${string}`;
@@ -283,28 +286,27 @@ interface FormDataState {
   minContribution: string;
   maxContribution: string;
   liquidityBps: string;
-  lockupDuration: string; // Stored in seconds as string
-  start: string; // ISO 8601 string
-  end: string; // ISO 8601 string
-  claimDelayMinutes: string; // Informational
+  lockupDuration: string;
+  start: string;
+  end: string;
+  claimDelayMinutes: string;
   useVesting: boolean;
   vestingTgePercent: string;
   vestingCycleDays: string;
-  leftoverTokenOption: string; // "0" for Refund (to owner), "1" for Burn
+  leftoverTokenOption: string;
   slippageBps: string;
-  whitelistType: string; // "0" Public, "1" Merkle Tree, "2" NFT Holders
+  whitelistType: string;
   merkleRoot: string;
   nftContractAddress: string;
 }
-
-// --- State additions ---
 
 const CreatePresalePage: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [, setApprovalCompleted] = useState(false);
-  const { address, isConnected } = useAccount();
+  const { address, isConnected, chain } = useAccount();
   const { connect, connectors } = useConnect();
+  const { switchChain } = useSwitchChain(); // Added for chain switching
   const { writeContractAsync } = useWriteContract();
   const [formData, setFormData] = useState<FormDataState>({
     tokenAddress: "",
@@ -347,6 +349,7 @@ const CreatePresalePage: React.FC = () => {
   const [isTokenApproved, setIsTokenApproved] = useState(false);
   const [isFeeApproved, setIsFeeApproved] = useState(false);
 
+  // Read contract hooks (unchanged)
   const { data: creationFeeData } = useReadContract({
     address: FACTORY_ADDRESS,
     abi: factoryAbi,
@@ -398,6 +401,7 @@ const CreatePresalePage: React.FC = () => {
     },
   });
 
+  // Effect hooks (unchanged)
   useEffect(() => {
     const init = async () => {
       if (!FACTORY_ADDRESS || !isValidAddress(FACTORY_ADDRESS)) {
@@ -500,8 +504,9 @@ const CreatePresalePage: React.FC = () => {
       } else {
         setStatus("Transaction failed: Reverted.");
       }
+      setIsProcessing(false); // Reset processing state after receipt
     }
-  }, [receipt, address, formData]);
+  }, [receipt]);
 
   const connectWallet = () => {
     if (connectors.length > 0) {
@@ -532,7 +537,7 @@ const CreatePresalePage: React.FC = () => {
     }
     return true;
   };
-  //calculateTotalTokensNeededForPresale
+
   const calculateAndSetTokenDeposit = useCallback(async () => {
     if (!formData.tokenAddress || !isValidAddress(formData.tokenAddress)) {
       setTokenDeposit("0");
@@ -735,6 +740,7 @@ const CreatePresalePage: React.FC = () => {
     return null;
   };
 
+  // Updated approveToken function with better error handling and timeout
   const approveToken = async (
     tokenAddr: string,
     amountToApprove: string,
@@ -743,6 +749,11 @@ const CreatePresalePage: React.FC = () => {
     tokenSymbolToUse: string,
     type: string
   ) => {
+    console.log("approveToken called with", {
+      tokenAddr,
+      amountToApprove,
+      spenderAddr,
+    });
     if (
       !isConnected ||
       !tokenAddr ||
@@ -753,11 +764,27 @@ const CreatePresalePage: React.FC = () => {
       setStatus(
         `Invalid parameters or wallet not connected for ${type} approval.`
       );
+      setIsProcessing(false);
       return false;
     }
     if (parseFloat(amountToApprove) <= 0 && type !== "Max") {
       setStatus(`Approval amount for ${type} must be positive.`);
+      setIsProcessing(false);
       return false;
+    }
+
+    // Check chain
+    if (chain?.id !== base.id) {
+      try {
+        await switchChain({ chainId: base.id });
+        setStatus("Switched to Base network. Please try again.");
+        setIsProcessing(false);
+        return false;
+      } catch (switchError: any) {
+        setStatus(`Failed to switch network: ${switchError.message}`);
+        setIsProcessing(false);
+        return false;
+      }
     }
 
     try {
@@ -768,35 +795,51 @@ const CreatePresalePage: React.FC = () => {
       setStatus(
         `Approving ${tokenSymbolToUse || type} (${amountToApprove})...`
       );
-      const hash = await writeContractAsync({
+
+      // Add a timeout for wallet interaction (e.g., 30 seconds)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Wallet interaction timed out")),
+          30000
+        )
+      );
+
+      const approvalPromise = writeContractAsync({
         address: tokenAddr as `0x${string}`,
         abi: erc20Abi,
         functionName: "approve",
         args: [spenderAddr as `0x${string}`, amountInWei],
       });
-      setTxHash(hash);
+
+      const hash = await Promise.race([approvalPromise, timeoutPromise]);
+      setTxHash(hash as `0x${string}`);
       setStatus(
         `Approval transaction sent: ${hash}. Waiting for confirmation...`
       );
       return true;
     } catch (error: any) {
+      console.error(`[Approve ${type}] Error:`, error);
       if (error.message.includes("User denied")) {
         setStatus(`Approval cancelled by user.`);
       } else if (error.message.includes("ERC20InsufficientBalance")) {
         setStatus(`Insufficient ${tokenSymbolToUse} balance for approval.`);
       } else if (error.message.includes("ERC20InsufficientAllowance")) {
         setStatus(`Insufficient allowance for ${tokenSymbolToUse}.`);
+      } else if (error.message.includes("Wallet interaction timed out")) {
+        setStatus("Wallet interaction timed out. Please try again.");
       } else {
         setStatus(
           `Error approving ${type}: ${error.message || "Unknown error"}.`
         );
       }
+      setIsProcessing(false);
       return false;
     }
   };
 
-  // --- Approve logic ---
+  // Updated handleApprove function
   const handleApprove = async () => {
+    console.log("handleApprove called");
     if (tokenDeposit === "0" || !formData.tokenAddress) {
       setStatus("Enter valid token deposit and address first.");
       return;
@@ -845,10 +888,9 @@ const CreatePresalePage: React.FC = () => {
       } catch (err: any) {
         setStatus("Could not get fee token decimals for approval.");
         approvalSuccess = false;
+        setIsProcessing(false);
       }
     }
-
-    setIsProcessing(false);
 
     if (approvalSuccess) {
       setApprovalCompleted(true);
@@ -856,12 +898,14 @@ const CreatePresalePage: React.FC = () => {
       setStatus("Approval successful! You can now create the presale.");
       setTimeout(() => setShowSuccess(false), 3000);
     }
+    setIsProcessing(false);
   };
 
-  // --- Create Presale logic ---
+  // Updated createPresale function
   const createPresale = async () => {
     if (!isConnected) {
       setStatus("Please connect wallet.");
+      setIsProcessing(false);
       return;
     }
     setIsProcessing(true);
@@ -892,6 +936,20 @@ const CreatePresalePage: React.FC = () => {
       setStatus("Please approve tokens first.");
       setIsProcessing(false);
       return;
+    }
+
+    // Check chain
+    if (chain?.id !== base.id) {
+      try {
+        await switchChain({ chainId: base.id });
+        setStatus("Switched to Base network. Please try again.");
+        setIsProcessing(false);
+        return;
+      } catch (switchError: any) {
+        setStatus(`Failed to switch network: ${switchError.message}`);
+        setIsProcessing(false);
+        return;
+      }
     }
 
     setStatus("Sending transaction to create presale...");
@@ -951,16 +1009,22 @@ const CreatePresalePage: React.FC = () => {
           value: txOptions.value,
         });
         txOptions.gas = (gasEstimate * BigInt(120)) / BigInt(100);
-        // Only log gas details to console, not frontend
         console.log(
           `Gas estimated: ${txOptions.gas.toString()}. Creating presale...`
         );
       } catch (gasError: any) {
         console.error("Gas estimation error details:", gasError);
-        // Do not show gas estimation errors to user, just fallback to manual gas
       }
 
-      const hash = await writeContractAsync({
+      // Add timeout for wallet interaction
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Wallet interaction timed out")),
+          30000
+        )
+      );
+
+      const createPromise = writeContractAsync({
         address: FACTORY_ADDRESS as `0x${string}`,
         abi: factoryAbi,
         functionName: "createPresale",
@@ -973,9 +1037,12 @@ const CreatePresalePage: React.FC = () => {
         gas: txOptions.gas,
         value: txOptions.value,
       });
-      setTxHash(hash);
+
+      const hash = await Promise.race([createPromise, timeoutPromise]);
+      setTxHash(hash as `0x${string}`);
       setStatus(`Transaction sent. Waiting for confirmation...`);
     } catch (error: any) {
+      console.error("[CreatePresale] Error:", error);
       if (error.message.includes("User denied")) {
         setStatus("Presale creation cancelled by user.");
       } else if (error.message.includes("PairAlreadyExists")) {
@@ -1014,15 +1081,18 @@ const CreatePresalePage: React.FC = () => {
         setStatus("NFT contract address is required for whitelist type.");
       } else if (error.message.includes("InvalidLiquidityBps")) {
         setStatus("Liquidity BPS is invalid.");
+      } else if (error.message.includes("Wallet interaction timed out")) {
+        setStatus("Wallet interaction timed out. Please try again.");
       } else {
         setStatus(
           `Error creating presale: ${error.message || "Unknown error"}.`
         );
       }
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
   };
 
+  // FormInput, SectionTitle, and JSX (unchanged)
   interface FormInputProps {
     label: string;
     name: keyof FormDataState | string;
