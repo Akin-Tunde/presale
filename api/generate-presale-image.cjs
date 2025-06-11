@@ -89,7 +89,7 @@ async function getFontData(fontPath) {
 module.exports = async (req, res) => {
   try {
     await ensureModulesLoaded();
-    const { html: satoriHtml } = satoriHtmlModuleInstance; // Get the html function from the loaded module
+    const { html: satoriHtml } = satoriHtmlModuleInstance;
     const { publicClient: client } = getServerConfig();
 
     // Robustly access ABI arrays, accounting for potential 'default' export
@@ -227,21 +227,16 @@ module.exports = async (req, res) => {
 
     const html = getPresaleImageHtml(imageData);
 
-    // --- Load Fonts for Satori ---
-    // Ensure these fonts are in your /public/fonts directory or adjust paths
+    // Load fonts
     const interRegularFont = await getFontData("fonts/Inter-Regular.ttf");
     const interBoldFont = await getFontData("fonts/Inter-Bold.ttf");
 
     if (!interRegularFont || !interBoldFont) {
       console.error("Required fonts could not be loaded.");
-      return res.status(500).json({
-        error: "Font loading failed",
-        imageUrl: DEFAULT_FALLBACK_IMAGE_URL,
-      });
+      return res.redirect(DEFAULT_FALLBACK_IMAGE_URL);
     }
 
-    // --- Generate SVG with Satori ---
-    // Convert the HTML string to Satori's VNode structure
+    // Generate SVG with Satori
     const satoriElementTree = satoriHtml(html);
     const svg = await satori(satoriElementTree, {
       width: 1200,
@@ -253,32 +248,24 @@ module.exports = async (req, res) => {
           weight: 400,
           style: "normal",
         },
-        { name: "Inter", data: interBoldFont, weight: 700, style: "normal" },
-        // Add Poppins if used in template
+        {
+          name: "Inter",
+          data: interBoldFont,
+          weight: 700,
+          style: "normal",
+        },
       ],
     });
 
-    // --- Convert SVG to PNG with Sharp ---
+    // Convert SVG to PNG buffer
     const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
 
-    // --- Upload to Vercel Blob ---
-    const blobFilename = `presale-images/${presaleAddress}-${Date.now()}.png`;
-    const blob = await vercelBlobPut(blobFilename, pngBuffer, {
-      access: "public",
-      contentType: "image/png",
-      addRandomSuffix: false, // We added a timestamp
-      cacheControlMaxAge: 60 * 60 * 24 * 7, // Cache for 7 days
-    });
-
-    console.log(
-      `[GenerateImage] Successfully generated and uploaded image: ${blob.url}`
-    );
-    return res.status(200).json({ imageUrl: blob.url });
+    // Set headers for image response
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "public, max-age=3600"); // Cache for 1 hour
+    return res.send(pngBuffer);
   } catch (error) {
     console.error("[GenerateImage] Error:", error);
-    return res.status(500).json({
-      error: `Image generation failed: ${error.message}`,
-      imageUrl: DEFAULT_FALLBACK_IMAGE_URL,
-    });
+    return res.redirect(DEFAULT_FALLBACK_IMAGE_URL);
   }
 };
