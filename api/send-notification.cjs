@@ -30,7 +30,7 @@ const NEYNAR_API_NOTIFICATIONS_URL =
 // Simple in-memory cache for Farcaster profiles (consider a more persistent cache for production)
 const profileCache = new Map();
 
-// --- Helper Functions (Adapted from FireBallDrop and useFarcasterProfiles) ---
+// --- Helper Functions () ---
 
 async function fetchFarcasterProfiles(addresses) {
   if (!NEYNAR_API_KEY) return {}; // Don't attempt if key is missing

@@ -53,6 +53,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"; // If using shadcn/ui or similar
+import { FarcasterProfileDisplay } from "@/components/FarcasterProfileDisplay";
 
 const presaleAbi = PresaleJson.abi as Abi;
 
@@ -257,6 +258,10 @@ const PresaleDetailPage = () => {
   const [logoError, setLogoError] = useState(false);
   const [currentAction, setCurrentAction] = useState<string | null>(null);
   const [showContributeSuccess, setShowContributeSuccess] = useState(false);
+  const [contributorList, setContributorList] = useState<string[]>([]);
+  const [contributorAmounts, setContributorAmounts] = useState<{
+    [key: string]: bigint;
+  }>({});
 
   const presaleContractConfig = {
     address: presaleAddress,
@@ -732,6 +737,45 @@ const PresaleDetailPage = () => {
     }
   };
 
+  // --- Contributor List Fetching ---
+  const { data: contributorsData } = useReadContract({
+    address: presaleAddress,
+    abi: presaleAbi,
+    functionName: "getContributors",
+    query: { enabled: !!presaleAddress },
+  });
+
+  useEffect(() => {
+    if (contributorsData) {
+      setContributorList(contributorsData as string[]);
+    }
+  }, [contributorsData]);
+
+  const { data: contributionsData } = useReadContracts({
+    contracts: contributorList.map((address) => ({
+      address: presaleAddress!,
+      abi: presaleAbi,
+      functionName: "contributions",
+      args: [address],
+    })),
+    query: {
+      enabled: contributorList.length > 0 && !!presaleAddress,
+    },
+  });
+
+  // Add this effect to update contributor amounts when data is received
+  useEffect(() => {
+    if (contributionsData && contributorList) {
+      const amounts = Object.fromEntries(
+        contributorList.map((address, index) => [
+          address,
+          (contributionsData[index]?.result as bigint) || 0n,
+        ])
+      );
+      setContributorAmounts(amounts);
+    }
+  }, [contributionsData, contributorList]);
+
   if (isLoadingPresale && !presaleData) return <PresaleDetailSkeleton />;
   if (!presaleAddress || !options)
     return (
@@ -1110,8 +1154,41 @@ const PresaleDetailPage = () => {
               )}
             </div>
             <div className="bg-primary-50 rounded-lg p-4 flex flex-col shadow-sm hover:shadow-md transition-shadow duration-200">
-              <div className="text-primary-900 font-medium mb-2 flex items-center">
-                <Users className="h-4 w-4 mr-2" /> Participation
+              <div className="pt-6 border-t border-primary-100/20">
+                <h3 className="text-lg font-heading font-semibold mb-4 text-foreground flex items-center">
+                  <Users className="h-5 w-5 mr-2" /> Contributors (
+                  {contributorList.length})
+                </h3>
+
+                {contributorList.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-2">
+                    {contributorList.map((address) => (
+                      <div
+                        key={address}
+                        className="bg-primary-50/50 rounded-lg p-3 hover:bg-primary-50 transition-colors"
+                      >
+                        <FarcasterProfileDisplay
+                          address={address}
+                          showBadge={true}
+                          size="sm"
+                        />
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Contributed:{" "}
+                          {formatUnits(
+                            contributorAmounts[address] || 0n,
+                            currencyDecimals
+                          )}{" "}
+                          {currencyDisplaySymbol}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p>No contributors yet. Be the first to join!</p>
+                  </div>
+                )}
               </div>
               <div className="text-sm text-muted-foreground">
                 Contributors:{" "}
