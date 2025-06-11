@@ -349,25 +349,6 @@ module.exports = async (req, res) => {
   <meta property="og:image" content="${frameData.imageUrl}" />
 `;
 
-    // TODO: Customize these tags based on fetched frameData and desired frame logic
-    // const metaTags = `
-    //   <meta property="fc:frame" content="vNext" />
-    //   <meta property="fc:frame:image" content="${frameData.imageUrl}" />
-    //   <meta property="fc:frame:image:aspect_ratio" content="1.91:1" />
-    //   <meta property="fc:frame:post_url" content="${postUrl}?address=${presaleAddress}" />
-
-    //   <meta property="fc:frame:button:1" content="Join Presale" />
-    //   <meta property="fc:frame:button:1:action" content="launch_frame" />
-    //   <meta property="fc:frame:button:1:target" content="${pageUrl}" />
-    //   <meta property="fc:frame:button:1:name" content="Raize" />
-    //   <meta property="fc:frame:button:1:splash_image_url" content="${APP_URL}/logo.png" />
-    //   <meta property="fc:frame:button:1:splash_background_color" content="#1f2937" />
-
-    //   <meta property="og:title" content="${frameData.tokenSymbol} Presale on Raize" />
-    //   <meta property="og:description" content="Join the ${frameData.tokenSymbol} presale! Status: ${frameData.status}. Rate: ${frameData.presaleRate} ${frameData.tokenSymbol}/${frameData.currencySymbol}. Hard Cap: ${frameData.hardCap} ${frameData.currencySymbol}." />
-    //   <meta property="og:image" content="${frameData.imageUrl}" />
-    // `;
-
     // Inject meta tags into the <head> section
     const modifiedHtml = htmlContent.replace("</head>", `${metaTags}</head>`);
 
