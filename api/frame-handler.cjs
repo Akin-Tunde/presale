@@ -201,27 +201,31 @@ async function getPresaleFrameData(presaleAddress) {
     // --- Dynamically generate or fetch image URL ---
     let dynamicImageUrl = `${APP_URL}/default-presale-image.png`; // Fallback
     try {
-      const imageGenResponse = await fetch(
-        `${APP_URL}/api/generate-presale-image?address=${presaleAddress}`
-      );
-      if (imageGenResponse.ok) {
-        const imageGenData = await imageGenResponse.json();
-        dynamicImageUrl = imageGenData.imageUrl || dynamicImageUrl;
+      // Direct image URL without JSON parsing
+      dynamicImageUrl = `${APP_URL}/api/generate-presale-image?address=${presaleAddress}`;
+
+      // Optionally verify the image endpoint is responding
+      const imageCheck = await fetch(dynamicImageUrl, { method: "HEAD" });
+      if (!imageCheck.ok) {
+        console.warn(
+          `[Frame Handler] Image endpoint not responding for ${presaleAddress}: ${imageCheck.status}`
+        );
+        dynamicImageUrl = `${APP_URL}/default-presale-image.png`;
       }
     } catch (imgError) {
       console.warn(
-        `[Frame Handler] Failed to generate dynamic image for ${presaleAddress}: ${imgError.message}`
+        `[Frame Handler] Failed to verify image endpoint for ${presaleAddress}: ${imgError.message}`
       );
+      dynamicImageUrl = `${APP_URL}/default-presale-image.png`;
     }
 
     return {
       tokenSymbol,
       imageUrl: dynamicImageUrl,
       status: statusText,
-      presaleRate: formatUnits(rate, tokenDecimals), // Assuming rate is how many tokens per 1 unit of currency
+      presaleRate: formatUnits(rate, tokenDecimals),
       hardCap: formatUnits(hardCap, currencyDecimals),
       currencySymbol,
-      // Add more data as needed for frame buttons/text
     };
   } catch (err) {
     console.error(
