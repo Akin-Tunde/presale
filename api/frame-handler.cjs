@@ -201,27 +201,31 @@ async function getPresaleFrameData(presaleAddress) {
     // --- Dynamically generate or fetch image URL ---
     let dynamicImageUrl = `${APP_URL}/default-presale-image.png`; // Fallback
     try {
-      const imageGenResponse = await fetch(
-        `${APP_URL}/api/generate-presale-image?address=${presaleAddress}`
-      );
-      if (imageGenResponse.ok) {
-        const imageGenData = await imageGenResponse.json();
-        dynamicImageUrl = imageGenData.imageUrl || dynamicImageUrl;
+      // Direct image URL without JSON parsing
+      dynamicImageUrl = `${APP_URL}/api/generate-presale-image?address=${presaleAddress}`;
+
+      // Optionally verify the image endpoint is responding
+      const imageCheck = await fetch(dynamicImageUrl, { method: "HEAD" });
+      if (!imageCheck.ok) {
+        console.warn(
+          `[Frame Handler] Image endpoint not responding for ${presaleAddress}: ${imageCheck.status}`
+        );
+        dynamicImageUrl = `${APP_URL}/default-presale-image.png`;
       }
     } catch (imgError) {
       console.warn(
-        `[Frame Handler] Failed to generate dynamic image for ${presaleAddress}: ${imgError.message}`
+        `[Frame Handler] Failed to verify image endpoint for ${presaleAddress}: ${imgError.message}`
       );
+      dynamicImageUrl = `${APP_URL}/default-presale-image.png`;
     }
 
     return {
       tokenSymbol,
       imageUrl: dynamicImageUrl,
       status: statusText,
-      presaleRate: formatUnits(rate, tokenDecimals), // Assuming rate is how many tokens per 1 unit of currency
+      presaleRate: formatUnits(rate, tokenDecimals),
       hardCap: formatUnits(hardCap, currencyDecimals),
       currencySymbol,
-      // Add more data as needed for frame buttons/text
     };
   } catch (err) {
     console.error(
@@ -313,7 +317,7 @@ module.exports = async (req, res) => {
     const frameMeta = {
       version: "next",
       imageUrl: frameData.imageUrl,
-      imageAspectRatio: "3:2",
+      imageAspectRatio: "1.91:1",
       postUrl: `${postUrl}?address=${presaleAddress}`,
       button: {
         title: "Join this Presale",
@@ -344,25 +348,6 @@ module.exports = async (req, res) => {
     }." />
   <meta property="og:image" content="${frameData.imageUrl}" />
 `;
-
-    // TODO: Customize these tags based on fetched frameData and desired frame logic
-    // const metaTags = `
-    //   <meta property="fc:frame" content="vNext" />
-    //   <meta property="fc:frame:image" content="${frameData.imageUrl}" />
-    //   <meta property="fc:frame:image:aspect_ratio" content="1.91:1" />
-    //   <meta property="fc:frame:post_url" content="${postUrl}?address=${presaleAddress}" />
-
-    //   <meta property="fc:frame:button:1" content="Join Presale" />
-    //   <meta property="fc:frame:button:1:action" content="launch_frame" />
-    //   <meta property="fc:frame:button:1:target" content="${pageUrl}" />
-    //   <meta property="fc:frame:button:1:name" content="Raize" />
-    //   <meta property="fc:frame:button:1:splash_image_url" content="${APP_URL}/logo.png" />
-    //   <meta property="fc:frame:button:1:splash_background_color" content="#1f2937" />
-
-    //   <meta property="og:title" content="${frameData.tokenSymbol} Presale on Raize" />
-    //   <meta property="og:description" content="Join the ${frameData.tokenSymbol} presale! Status: ${frameData.status}. Rate: ${frameData.presaleRate} ${frameData.tokenSymbol}/${frameData.currencySymbol}. Hard Cap: ${frameData.hardCap} ${frameData.currencySymbol}." />
-    //   <meta property="og:image" content="${frameData.imageUrl}" />
-    // `;
 
     // Inject meta tags into the <head> section
     const modifiedHtml = htmlContent.replace("</head>", `${metaTags}</head>`);
